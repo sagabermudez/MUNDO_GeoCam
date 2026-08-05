@@ -219,17 +219,17 @@ body, html {
 
 .icon-btn, .text-btn, .thumb-btn {
   background: transparent;
-  border: 1px solid #ff1212;
+  border: 0px solid #ff1212;
   color: #fff;
-  font-size: 18px;
+  font-size: 30px;
   cursor: pointer;
 }
 
 .thumb-btn {
-  width: 40px;
-  height: 40px;
+  width: 50px;
+  height: 50px;
   border-radius: 6px;
-  border: 1px solid #444;
+  border: 0px solid #444;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -239,16 +239,17 @@ body, html {
 
 
 .icon-btn {
-  width: 40px;
-  height: 40px;
+  width: 50px;
+  height: 50px;
   border-radius: 6px;
-  border: 1px solid #444;
+  border: 0px solid #444;
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
   background-size: cover;
 }
+
 
 
 /* Handling Landscape Responsiveness (Moves only overlays/panels smoothly) */
@@ -258,7 +259,7 @@ body, html {
   }
   
   .top-bar {
-    width: 48px;
+    width: 64px;
     justify-content: center;
     display: flex;
     flex-direction: column; 
@@ -286,7 +287,7 @@ body, html {
 }
 
   .mode-selector {
-    visibility: hidden; /* Hide mode selector in landscape */
+    
     transform: rotate(-90deg);
     gap: 20px;
      justify-content: center;

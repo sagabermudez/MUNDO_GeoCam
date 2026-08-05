@@ -124,12 +124,21 @@ async function initCamera() {
 // Setup Event Listeners
 window.addEventListener('DOMContentLoaded', () => {
   initCamera();
+
   if (window.DeviceOrientationEvent && !DeviceOrientationEvent.requestPermission) {
     window.addEventListener('deviceorientation', handleOrientation, true);
   }
 
+  // Safe Listener Attachment Helper
+  const safeAddListener = (id, event, handler) => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.addEventListener(event, handler);
+    }
+  };
+
   // Torch Toggle
-  btnTorch.addEventListener('click', async () => {
+  safeAddListener('btn-torch', 'click', async () => {
     if (!state.stream) return;
     const track = state.stream.getVideoTracks()[0];
     const capabilities = track.getCapabilities ? track.getCapabilities() : {};
@@ -141,13 +150,9 @@ window.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // Switch Mode
-  document.getElementById('mode-photo').addEventListener('click', (e) => {
-    setMode('PHOTO', e.target);
-  });
-  document.getElementById('mode-video').addEventListener('click', (e) => {
-    setMode('VIDEO', e.target);
-  });
+  // Photo / Video Mode Switches
+  safeAddListener('mode-photo', 'click', (e) => setMode('PHOTO', e.target));
+  safeAddListener('mode-video', 'click', (e) => setMode('VIDEO', e.target));
 
   function setMode(mode, target) {
     state.mode = mode;
@@ -157,7 +162,7 @@ window.addEventListener('DOMContentLoaded', () => {
   }
 
   // Shutter Press
-  btnShutter.addEventListener('click', () => {
+  safeAddListener('btn-shutter', 'click', () => {
     if (state.mode === 'PHOTO') {
       inputRemarks.value = state.lastRemarks;
       modalRemarks.classList.remove('hidden');
@@ -166,12 +171,12 @@ window.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // Modal Buttons
-  document.getElementById('btn-cancel-capture').addEventListener('click', () => {
+  // Modal Action Buttons
+  safeAddListener('btn-cancel-capture', 'click', () => {
     modalRemarks.classList.add('hidden');
   });
 
-  document.getElementById('btn-confirm-capture').addEventListener('click', () => {
+  safeAddListener('btn-confirm-capture', 'click', () => {
     modalRemarks.classList.add('hidden');
     state.lastRemarks = inputRemarks.value;
     document.getElementById('disp-remarks').innerText = `Remarks: ${state.lastRemarks}`;
@@ -179,41 +184,52 @@ window.addEventListener('DOMContentLoaded', () => {
   });
 
   // Switch Facing Camera
-  document.getElementById('btn-switch-cam').addEventListener('click', () => {
+  safeAddListener('btn-switch-cam', 'click', () => {
     state.facingMode = state.facingMode === 'environment' ? 'user' : 'environment';
     initCamera();
   });
 
   // Navigation Screens
-  document.getElementById('btn-settings').addEventListener('click', () => switchScreen('settings-screen'));
-  document.getElementById('btn-close-settings').addEventListener('click', () => switchScreen('camera-screen'));
-  document.getElementById('btn-library').addEventListener('click', () => {
+  safeAddListener('btn-settings', 'click', () => switchScreen('settings-screen'));
+  safeAddListener('btn-close-settings', 'click', () => switchScreen('camera-screen'));
+  safeAddListener('btn-library', 'click', () => {
     renderLibrary();
     switchScreen('library-screen');
   });
-  document.getElementById('btn-close-lib').addEventListener('click', () => switchScreen('camera-screen'));
+  safeAddListener('btn-close-lib', 'click', () => switchScreen('camera-screen'));
 
   // Save Settings & Logo
-  document.getElementById('btn-save-settings').addEventListener('click', () => {
-    state.surveyTitle = document.getElementById('setting-title').value.toUpperCase();
-    state.author = document.getElementById('setting-author').value;
-    state.defaultRemarks = document.getElementById('setting-default-remarks').value;
+  safeAddListener('btn-save-settings', 'click', () => {
+    const titleInput = document.getElementById('setting-title');
+    const authorInput = document.getElementById('setting-author');
+    const remarksInput = document.getElementById('setting-default-remarks');
+
+    if (titleInput) state.surveyTitle = titleInput.value.toUpperCase();
+    if (authorInput) state.author = authorInput.value;
+    if (remarksInput) state.defaultRemarks = remarksInput.value;
     state.lastRemarks = state.defaultRemarks;
 
-    document.getElementById('disp-survey-title').innerText = state.surveyTitle;
-    document.getElementById('disp-author').innerText = `Photo captured by: ${state.author}`;
-    document.getElementById('disp-remarks').innerText = `Remarks: ${state.defaultRemarks}`;
+    if (document.getElementById('disp-survey-title')) {
+      document.getElementById('disp-survey-title').innerText = state.surveyTitle;
+    }
+    if (document.getElementById('disp-author')) {
+      document.getElementById('disp-author').innerText = `Photo captured by: ${state.author}`;
+    }
+    if (document.getElementById('disp-remarks')) {
+      document.getElementById('disp-remarks').innerText = `Remarks: ${state.defaultRemarks}`;
+    }
 
-    const logoFile = document.getElementById('setting-logo-file').files[0];
+    const logoFile = document.getElementById('setting-logo-file')?.files[0];
     if (logoFile) {
       const reader = new FileReader();
       reader.onload = (e) => {
         const logoImg = document.getElementById('overlay-logo');
-        logoImg.src = e.target.result;
-        logoImg.classList.remove('hidden');
-        document.getElementById('logo-placeholder').classList.add('hidden');
+        if (logoImg) {
+          logoImg.src = e.target.result;
+          logoImg.classList.remove('hidden');
+        }
+        document.getElementById('logo-placeholder')?.classList.add('hidden');
 
-        // Create HTMLImageElement for direct canvas context rendering
         const img = new Image();
         img.src = e.target.result;
         img.onload = () => { state.logoImgObj = img; };
@@ -223,9 +239,9 @@ window.addEventListener('DOMContentLoaded', () => {
     switchScreen('camera-screen');
   });
 
-  // Data Export
-  document.getElementById('btn-export-csv').addEventListener('click', exportCSV);
-  document.getElementById('btn-export-geojson').addEventListener('click', exportGeoJSON);
+  // Data Export Buttons
+  safeAddListener('btn-export-csv', 'click', exportCSV);
+  safeAddListener('btn-export-geojson', 'click', exportGeoJSON);
 });
 
 function switchScreen(id) {
