@@ -471,22 +471,30 @@ function saveToDB(record) {
 
 function loadLibraryThumb() {
   if (!db) return;
+  const libBtn = document.getElementById('btn-library');
+  if (!libBtn) return;
+
   const tx = db.transaction("captures", "readonly");
   const store = tx.objectStore("captures");
   const req = store.openCursor(null, 'prev');
+
   req.onsuccess = (e) => {
     const cursor = e.target.result;
     if (cursor) {
-      const libBtn = document.getElementById('btn-library');
-      if (libBtn) libBtn.style.backgroundImage = `url(${cursor.value.blobUrl})`;
+      libBtn.style.backgroundImage = `url(${cursor.value.blobUrl})`;
+    } else {
+      // Clear thumbnail if database is empty
+      libBtn.style.backgroundImage = 'none';
     }
   };
 }
 
+// Render Media Library with Delete Option
 function renderLibrary() {
   const grid = document.getElementById('library-grid');
   if (!grid) return;
   grid.innerHTML = '';
+
   const tx = db.transaction("captures", "readonly");
   tx.objectStore("captures").openCursor(null, 'prev').onsuccess = (e) => {
     const cursor = e.target.result;
@@ -494,21 +502,44 @@ function renderLibrary() {
       const item = cursor.value;
       const el = document.createElement('div');
       el.className = 'grid-item';
+
       const mediaHtml = item.type === 'image' 
-        ? `<img src="${item.blobUrl}">` 
-        : `<video src="${item.blobUrl}"></video>`;
-      
+        ? `<img src="${item.blobUrl}" alt="${item.title}">` 
+        : `<video src="${item.blobUrl}" controls></video>`;
+
       el.innerHTML = `
+        <button class="btn-delete" data-id="${item.id}" title="Delete Item">🗑️</button>
         ${mediaHtml}
         <div class="grid-info">
           <strong>${item.title}</strong><br>
           ${item.timestamp}<br>
-          📍 ${item.lat || '0'}, ${item.lng || '0'}
+          📍 ${item.lat || '0'}, ${item.lng || '0'}<br>
+          <em>${item.remarks || ''}</em>
         </div>
       `;
+
+      // Attach listener to delete button
+      el.querySelector('.btn-delete').addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        if (confirm("Are you sure you want to delete this capture?")) {
+          deleteCapture(item.id);
+        }
+      });
+
       grid.appendChild(el);
       cursor.continue();
     }
+  };
+}
+
+// Delete Record from IndexedDB
+function deleteCapture(id) {
+  const tx = db.transaction("captures", "readwrite");
+  const store = tx.objectStore("captures");
+  
+  store.delete(id).onsuccess = () => {
+    renderLibrary();    // Refresh grid display
+    loadLibraryThumb(); // Update shutter thumbnail preview
   };
 }
 
