@@ -1,4 +1,4 @@
-const CACHE_NAME = 'mundo-geocam-v1';
+const CACHE_NAME = 'geocam-v1';
 const ASSETS = [
   './',
   './index.html',
@@ -7,6 +7,7 @@ const ASSETS = [
   './manifest.json'
 ];
 
+// Install Service Worker and cache resources
 self.addEventListener('install', (e) => {
   e.waitUntil(
     caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS))
@@ -14,17 +15,25 @@ self.addEventListener('install', (e) => {
   self.skipWaiting();
 });
 
+// Activate & Cleanup Old Caches
 self.addEventListener('activate', (e) => {
   e.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(keys.map((k) => k !== CACHE_NAME && caches.delete(k)))
-    )
+    caches.keys().then((keys) => {
+      return Promise.all(
+        keys.map((key) => {
+          if (key !== CACHE_NAME) return caches.delete(key);
+        })
+      );
+    })
   );
   self.clients.claim();
 });
 
+// Fetch Listener (Mandatory for PWA Installability Criteria)
 self.addEventListener('fetch', (e) => {
   e.respondWith(
-    caches.match(e.request).then((res) => res || fetch(e.request))
+    caches.match(e.request).then((cachedResponse) => {
+      return cachedResponse || fetch(e.request);
+    })
   );
 });
