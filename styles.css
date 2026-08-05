@@ -167,6 +167,7 @@ body, html {
 }
 
 .mode-selector {
+  visibility: visible;
   display: flex;
   gap: 20px;
    justify-content: center;
@@ -199,6 +200,8 @@ body, html {
   border: 4px solid #fff;
   background: transparent;
   position: relative;
+  align-items: center;
+  justify-content: center;
 }
 
 .shutter-btn::after {
@@ -211,7 +214,7 @@ body, html {
 
 .shutter-btn.recording::after {
   background: #ff3b30;
-  border-radius: 8px;
+  border-radius: 70px;
 }
 
 .icon-btn, .text-btn, .thumb-btn {
@@ -234,6 +237,18 @@ body, html {
   background-size: cover;
 }
 
+
+.icon-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 6px;
+  border: 1px solid #444;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background-size: cover;
+}
 
 
 /* Handling Landscape Responsiveness (Moves only overlays/panels smoothly) */
@@ -271,6 +286,7 @@ body, html {
 }
 
   .mode-selector {
+    visibility: hidden; /* Hide mode selector in landscape */
     transform: rotate(-90deg);
     gap: 20px;
      justify-content: center;

@@ -40,6 +40,7 @@ const btnShutter = document.getElementById('btn-shutter');
 const btnTorch = document.getElementById('btn-torch');
 const modalRemarks = document.getElementById('modal-remarks');
 const inputRemarks = document.getElementById('input-remarks');
+const viewportEl = document.getElementById('viewport-container'); // <-- ADD THIS LINE
 
 // Orientation / Compass Handler
 function handleOrientation(e) {
@@ -238,6 +239,10 @@ function processAndSavePhoto() {
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d');
 
+  // Safety fallback for viewport element
+  const viewport = viewportEl || document.getElementById('viewport-container');
+
+
   // 1. Get real-time viewport aspect ratio
   const viewportRect = viewportEl.getBoundingClientRect();
   const targetAspect = viewportRect.width / viewportRect.height;
@@ -350,25 +355,152 @@ function processAndSavePhoto() {
   downloadFile(dataUrl, `MUNDO_${Date.now()}.jpg`);
 }
 
-// Video Recording Operations
+// Global Animation Frame ID for Video Watermark Loop
+let videoAnimationFrame = null;
+
+// 1. Continuous Canvas Frame Renderer for Live Video Recording
+function drawVideoFrameToCanvas(canvas, ctx) {
+  const viewport = viewportEl || document.getElementById('viewport-container');
+  const viewportRect = viewport.getBoundingClientRect();
+  const targetAspect = viewportRect.width / viewportRect.height;
+
+  // Set recording canvas dimensions matching viewport aspect ratio
+  if (targetAspect >= 1) {
+    canvas.width = 1280;
+    canvas.height = Math.round(1280 / targetAspect);
+  } else {
+    canvas.height = 1280;
+    canvas.width = Math.round(1280 * targetAspect);
+  }
+
+  // Compute object-fit crop math
+  const videoWidth = videoEl.videoWidth || 1280;
+  const videoHeight = videoEl.videoHeight || 720;
+  const videoAspect = videoWidth / videoHeight;
+
+  let sx, sy, sWidth, sHeight;
+
+  if (videoAspect > targetAspect) {
+    sHeight = videoHeight;
+    sWidth = videoHeight * targetAspect;
+    sx = (videoWidth - sWidth) / 2;
+    sy = 0;
+  } else {
+    sWidth = videoWidth;
+    sHeight = videoWidth / targetAspect;
+    sx = 0;
+    sy = (videoHeight - sHeight) / 2;
+  }
+
+  // Draw cropped frame
+  ctx.drawImage(videoEl, sx, sy, sWidth, sHeight, 0, 0, canvas.width, canvas.height);
+
+  // Scaling factor for overlays
+  const scale = canvas.width / viewportRect.width;
+
+  // Top Brand Pill
+  const tagX = 15 * scale;
+  const tagY = 15 * scale;
+  const tagWidth = 160 * scale;
+  const tagHeight = 36 * scale;
+
+  ctx.fillStyle = "rgba(40, 40, 40, 0.85)";
+  ctx.roundRect(tagX, tagY, tagWidth, tagHeight, 18 * scale);
+  ctx.fill();
+  ctx.font = `bold ${16 * scale}px -apple-system, sans-serif`;
+  ctx.fillStyle = "#4CAF50";
+  ctx.fillText("MUNDO GeoCam", tagX + (16 * scale), tagY + (24 * scale));
+
+  // Bottom Panel
+  const panelHeight = 110 * scale;
+  const panelY = canvas.height - panelHeight;
+
+  ctx.fillStyle = "rgba(0, 0, 0, 0.75)";
+  ctx.fillRect(0, panelY, canvas.width, panelHeight);
+
+  let textXOffset = 20 * scale;
+
+  // Office Logo
+  if (state.logoImgObj) {
+    const logoSize = 65 * scale;
+    const logoY = panelY + ((panelHeight - logoSize) / 2);
+    ctx.drawImage(state.logoImgObj, textXOffset, logoY, logoSize, logoSize);
+    textXOffset += logoSize + (15 * scale);
+  }
+
+  // Live Metadata Overlay Text
+  const timestamp = new Date().toLocaleString();
+
+  ctx.fillStyle = "#FFFFFF";
+  ctx.font = `bold ${18 * scale}px -apple-system, sans-serif`;
+  ctx.fillText(state.surveyTitle, textXOffset, panelY + (28 * scale));
+
+  ctx.fillStyle = "#76FF03";
+  ctx.font = `bold ${16 * scale}px -apple-system, sans-serif`;
+  ctx.fillText(`📍 ${state.lat || '0.000000'}, ${state.lng || '0.000000'} | ${state.cardinal} ${state.heading}°`, textXOffset, panelY + (52 * scale));
+
+  ctx.fillStyle = "#DDDDDD";
+  ctx.font = `${14 * scale}px -apple-system, sans-serif`;
+  ctx.fillText(`Remarks: ${state.lastRemarks || state.defaultRemarks}`, textXOffset, panelY + (74 * scale));
+
+  ctx.fillStyle = "#AAAAAA";
+  ctx.font = `${12 * scale}px -apple-system, sans-serif`;
+  ctx.fillText(`Recorded by: ${state.author} | ${timestamp}`, textXOffset, panelY + (94 * scale));
+
+  // Continue rendering loop if recording is active
+  if (state.isRecording) {
+    videoAnimationFrame = requestAnimationFrame(() => drawVideoFrameToCanvas(canvas, ctx));
+  }
+}
+
+// 2. Updated Video Recording Control
 function toggleVideoRecording() {
   if (!state.isRecording) {
     state.recordedChunks = [];
-    state.mediaRecorder = new MediaRecorder(state.stream, { mimeType: 'video/webm' });
-    state.mediaRecorder.ondataavailable = (e) => state.recordedChunks.push(e.data);
+
+    // Create offscreen recording canvas
+    const recordCanvas = document.createElement('canvas');
+    const ctx = recordCanvas.getContext('2d');
+    state.isRecording = true;
+
+    // Start rendering video frames to canvas
+    drawVideoFrameToCanvas(recordCanvas, ctx);
+
+    // Capture 30 FPS stream from the cropped canvas
+    const canvasStream = recordCanvas.captureStream(30);
+
+    // Include audio track if available from mic stream
+    if (state.stream && state.stream.getAudioTracks().length > 0) {
+      canvasStream.addTrack(state.stream.getAudioTracks()[0]);
+    }
+
+    // Determine supported mimeType
+    const mimeType = MediaRecorder.isTypeSupported('video/mp4') 
+      ? 'video/mp4' 
+      : 'video/webm';
+
+    state.mediaRecorder = new MediaRecorder(canvasStream, { mimeType });
+    state.mediaRecorder.ondataavailable = (e) => {
+      if (e.data.size > 0) state.recordedChunks.push(e.data);
+    };
     state.mediaRecorder.onstop = saveVideo;
     state.mediaRecorder.start();
-    state.isRecording = true;
+
     btnShutter.classList.add('recording');
   } else {
-    state.mediaRecorder.stop();
+    // Stop recording and cancel animation loop
     state.isRecording = false;
+    if (videoAnimationFrame) cancelAnimationFrame(videoAnimationFrame);
+    state.mediaRecorder.stop();
     btnShutter.classList.remove('recording');
   }
 }
 
+// 3. Save Processed Video File
 function saveVideo() {
-  const blob = new Blob(state.recordedChunks, { type: 'video/webm' });
+  const mimeType = state.mediaRecorder.mimeType || 'video/webm';
+  const ext = mimeType.includes('mp4') ? 'mp4' : 'webm';
+  const blob = new Blob(state.recordedChunks, { type: mimeType });
   const videoUrl = URL.createObjectURL(blob);
   const timestamp = new Date().toLocaleString();
 
@@ -386,7 +518,7 @@ function saveVideo() {
   };
 
   saveToDB(record);
-  downloadFile(videoUrl, `MUNDO_${Date.now()}.webm`);
+  downloadFile(videoUrl, `MUNDO_${Date.now()}.${ext}`);
 }
 
 // IndexedDB Persistence
