@@ -233,68 +233,105 @@ function switchScreen(id) {
 }
 
 // Canvas Watermarking & Uncropped Full 16:9 Capture
+// Canvas Watermarking & Viewport-Matched Capture
 function processAndSavePhoto() {
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d');
 
-  const isLandscape = window.innerWidth > window.innerHeight;
-  
-  // Enforce native 16:9 aspect ratios based on orientation
-  if (isLandscape) {
+  // 1. Get real-time viewport aspect ratio
+  const viewportRect = viewportEl.getBoundingClientRect();
+  const targetAspect = viewportRect.width / viewportRect.height;
+
+  // 2. Set Canvas high-resolution dimensions matching viewport aspect ratio
+  if (targetAspect >= 1) {
     canvas.width = 1920;
-    canvas.height = 1080;
+    canvas.height = Math.round(1920 / targetAspect);
   } else {
-    canvas.width = 1080;
     canvas.height = 1920;
+    canvas.width = Math.round(1920 * targetAspect);
   }
 
-  // Draw Full Sensor Video Frame onto Canvas
-  ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+  // 3. Compute cropping parameters (Object-Fit: Cover algorithm)
+  const videoWidth = videoEl.videoWidth || 1920;
+  const videoHeight = videoEl.videoHeight || 1080;
+  const videoAspect = videoWidth / videoHeight;
 
-  // Draw Top Brand Tag
+  let sx, sy, sWidth, sHeight;
+
+  if (videoAspect > targetAspect) {
+    // Video stream is wider than viewport -> Crop sides
+    sHeight = videoHeight;
+    sWidth = videoHeight * targetAspect;
+    sx = (videoWidth - sWidth) / 2;
+    sy = 0;
+  } else {
+    // Video stream is taller than viewport -> Crop top/bottom
+    sWidth = videoWidth;
+    sHeight = videoWidth / targetAspect;
+    sx = 0;
+    sy = (videoHeight - sHeight) / 2;
+  }
+
+  // 4. Draw cropped stream onto canvas
+  ctx.drawImage(
+    videoEl,
+    sx, sy, sWidth, sHeight,  // Source crop area
+    0, 0, canvas.width, canvas.height // Canvas destination area
+  );
+
+  // 5. Calculate proportional overlay styling relative to high-res canvas
+  const scale = canvas.width / viewportRect.width;
+
+  // Top Brand Tag
+  const tagX = 15 * scale;
+  const tagY = 15 * scale;
+  const tagWidth = 160 * scale;
+  const tagHeight = 36 * scale;
+
   ctx.fillStyle = "rgba(40, 40, 40, 0.85)";
-  ctx.roundRect(30, 30, 220, 50, 25);
+  ctx.roundRect(tagX, tagY, tagWidth, tagHeight, 18 * scale);
   ctx.fill();
-  ctx.font = "bold 20px sans-serif";
+  ctx.font = `bold ${16 * scale}px -apple-system, sans-serif`;
   ctx.fillStyle = "#4CAF50";
-  ctx.fillText("MUNDO GeoCam", 55, 62);
+  ctx.fillText("MUNDO GeoCam", tagX + (16 * scale), tagY + (24 * scale));
 
-  // Draw Bottom Overlay Panel
-  const panelHeight = Math.round(canvas.height * 0.16);
+  // Bottom Overlay Panel
+  const panelHeight = 110 * scale;
   const panelY = canvas.height - panelHeight;
 
   ctx.fillStyle = "rgba(0, 0, 0, 0.75)";
   ctx.fillRect(0, panelY, canvas.width, panelHeight);
 
-  let textXOffset = 30;
+  let textXOffset = 20 * scale;
 
-  // Render Office Logo inside bottom panel if uploaded
+  // Draw Office Logo if uploaded
   if (state.logoImgObj) {
-    const logoSize = Math.round(panelHeight * 0.7);
-    const logoY = panelY + Math.round((panelHeight - logoSize) / 2);
-    ctx.drawImage(state.logoImgObj, 30, logoY, logoSize, logoSize);
-    textXOffset += logoSize + 20;
+    const logoSize = 65 * scale;
+    const logoY = panelY + ((panelHeight - logoSize) / 2);
+    ctx.drawImage(state.logoImgObj, textXOffset, logoY, logoSize, logoSize);
+    textXOffset += logoSize + (15 * scale);
   }
 
   // Text Metadata Output
   const timestamp = new Date().toLocaleString();
+  
   ctx.fillStyle = "#FFFFFF";
-  ctx.font = "bold 26px sans-serif";
-  ctx.fillText(state.surveyTitle, textXOffset, panelY + 40);
+  ctx.font = `bold ${18 * scale}px -apple-system, sans-serif`;
+  ctx.fillText(state.surveyTitle, textXOffset, panelY + (28 * scale));
 
   ctx.fillStyle = "#76FF03";
-  ctx.font = "bold 22px sans-serif";
-  ctx.fillText(`📍 ${state.lat || '0.000000'}, ${state.lng || '0.000000'} | ${state.cardinal} ${state.heading}°`, textXOffset, panelY + 75);
+  ctx.font = `bold ${16 * scale}px -apple-system, sans-serif`;
+  ctx.fillText(`📍 ${state.lat || '0.000000'}, ${state.lng || '0.000000'} | ${state.cardinal} ${state.heading}°`, textXOffset, panelY + (52 * scale));
 
   ctx.fillStyle = "#DDDDDD";
-  ctx.font = "20px sans-serif";
-  ctx.fillText(`Remarks: ${state.lastRemarks}`, textXOffset, panelY + 110);
+  ctx.font = `${14 * scale}px -apple-system, sans-serif`;
+  ctx.fillText(`Remarks: ${state.lastRemarks}`, textXOffset, panelY + (74 * scale));
 
   ctx.fillStyle = "#AAAAAA";
-  ctx.font = "16px sans-serif";
-  ctx.fillText(`Photo captured by: ${state.author} | ${timestamp}`, textXOffset, panelY + 140);
+  ctx.font = `${12 * scale}px -apple-system, sans-serif`;
+  ctx.fillText(`Photo captured by: ${state.author} | ${timestamp}`, textXOffset, panelY + (94 * scale));
 
-  // Export & Save File
+  // 6. Save and Download
   const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
   const record = {
     type: 'image',
