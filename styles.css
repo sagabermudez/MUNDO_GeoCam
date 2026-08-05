@@ -1,0 +1,369 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  user-select: none;
+}
+
+body, html {
+  width: 100%;
+  height: 100%;
+  background-color: #000;
+  color: #fff;
+  overflow: hidden;
+}
+
+#app {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.screen {
+  display: none;
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background-color: #000;
+  flex-direction: column;
+}
+
+.screen.active {
+  display: flex;
+}
+
+/* Camera Layout */
+.top-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 20px;
+  background: rgba(0,0,0,0.8);
+  z-index: 10;
+}
+
+#viewport-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  flex: 1;
+  background: #000;
+  overflow: hidden;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+#video-preview {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Watermark Overlay Elements */
+.brand-pill {
+  position: absolute;
+  top: 15px;
+  left: 15px;
+  background: rgba(40, 40, 40, 0.75);
+  color: #4CAF50;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-weight: bold;
+  font-size: 14px;
+  backdrop-filter: blur(4px);
+  z-index: 5;
+}
+
+.bottom-panel {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(6px);
+  padding: 10px 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  z-index: 5;
+  transition: all 0.3s ease;
+}
+
+/* Logo Panel Block */
+.logo-panel {
+  width: 55px;
+  height: 55px;
+  min-width: 55px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px dashed #666;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  margin-right: 10px;
+}
+
+.logo-panel img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.logo-placeholder {
+  font-size: 10px;
+  color: #aaa;
+  text-align: center;
+}
+
+.panel-left {
+  display: flex;
+  align-items: center;
+  flex: 1;
+}
+
+.panel-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.title-text { font-size: 14px; font-weight: 800; text-transform: uppercase; color: #fff; }
+.coords-text { font-size: 13px; font-weight: 700; color: #76FF03; }
+.remarks-text { font-size: 12px; color: #ddd; }
+.meta-text { font-size: 10px; color: #aaa; }
+
+.panel-right {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 65px;
+}
+
+.compass-icon {
+  font-size: 20px;
+  transition: transform 0.1s ease-out;
+  color: #fff;
+}
+
+.compass-text {
+  font-size: 10px;
+  font-weight: bold;
+  margin-top: 2px;
+  text-align: center;
+}
+
+/* Bottom Controls */
+.bottom-bar {
+  padding: 15px 20px;
+  background: rgba(0, 0, 0, 0.9);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  z-index: 10;
+}
+
+.mode-selector {
+  display: flex;
+  gap: 20px;
+}
+
+.mode-opt {
+  font-size: 12px;
+  font-weight: bold;
+  color: #888;
+  cursor: pointer;
+}
+
+.mode-opt.active {
+  color: #FFD700;
+  border-bottom: 2px solid #FFD700;
+}
+
+.shutter-container {
+  width: 100%;
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+}
+
+.shutter-btn {
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  border: 4px solid #fff;
+  background: transparent;
+  position: relative;
+}
+
+.shutter-btn::after {
+  content: '';
+  position: absolute;
+  top: 4px; left: 4px; right: 4px; bottom: 4px;
+  border-radius: 50%;
+  background: #fff;
+}
+
+.shutter-btn.recording::after {
+  background: #ff3b30;
+  border-radius: 8px;
+}
+
+.icon-btn, .text-btn, .thumb-btn {
+  background: transparent;
+  border: none;
+  color: #fff;
+  font-size: 18px;
+  cursor: pointer;
+}
+
+.thumb-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 6px;
+  border: 1px solid #444;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background-size: cover;
+}
+
+/* Handling Landscape Responsiveness (Moves only overlays/panels smoothly) */
+@media screen and (orientation: landscape) {
+  #camera-screen {
+    flex-direction: row;
+  }
+  
+  .top-bar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    background: linear-gradient(180deg, rgba(0,0,0,0.8), transparent);
+  }
+
+  .bottom-bar {
+    width: 100px;
+    height: 100%;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.85);
+  }
+
+  .shutter-container {
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  .bottom-panel {
+    right: 100px; /* Align to the left of shutter control bar */
+  }
+}
+
+/* Modals & Screens */
+.modal {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: 20px;
+}
+
+.modal.hidden { display: none; }
+
+.modal-content {
+  background: #1c1c1e;
+  border-radius: 12px;
+  padding: 20px;
+  width: 100%;
+  max-width: 400px;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+textarea, input[type="text"] {
+  width: 100%;
+  background: #2c2c2e;
+  border: 1px solid #3a3a3c;
+  color: #fff;
+  padding: 10px;
+  border-radius: 8px;
+  outline: none;
+}
+
+textarea { height: 80px; resize: none; }
+
+.modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
+
+.btn-pri, .btn-sec {
+  padding: 10px 16px;
+  border-radius: 8px;
+  border: none;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.btn-pri { background: #0a84ff; color: #fff; }
+.btn-sec { background: #3a3a3c; color: #fff; }
+
+.screen-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 15px 20px;
+  background: #1c1c1e;
+}
+
+.export-bar {
+  display: flex;
+  gap: 10px;
+  padding: 10px 20px;
+}
+
+.grid-container {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 10px;
+  padding: 20px;
+  overflow-y: auto;
+}
+
+.grid-item {
+  background: #1c1c1e;
+  border-radius: 8px;
+  overflow: hidden;
+  font-size: 10px;
+  display: flex;
+  flex-direction: column;
+}
+
+.grid-item img, .grid-item video {
+  width: 100%;
+  height: 100px;
+  object-fit: cover;
+}
+
+.grid-info { padding: 6px; }
+
+.settings-form {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  overflow-y: auto;
+}
+
+.settings-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 12px;
+  color: #aaa;
+}

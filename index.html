@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>MUNDO GeoCam</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Camera View Screen -->
+    <div id="camera-screen" class="screen active">
+      <!-- Top Control Bar -->
+      <div class="top-bar">
+        <button id="btn-torch" class="icon-btn" title="Toggle Torch">⚡</button>
+        <span class="text-btn" style="font-size:12px; font-weight:bold;">16:9 FULL</span>
+        <button id="btn-settings" class="icon-btn" title="Settings">⚙️</button>
+      </div>
+
+      <!-- Main Camera Viewport -->
+      <div id="viewport-container">
+        <video id="video-preview" autoplay playsinline muted></video>
+        
+        <!-- Live Watermark Overlay -->
+        <div id="overlay-brand" class="brand-pill">MUNDO GeoCam</div>
+        
+        <div id="overlay-bottom-panel" class="bottom-panel">
+          <div class="panel-left">
+            <!-- Dedicated Logo Panel -->
+            <div id="logo-panel" class="logo-panel">
+              <span id="logo-placeholder" class="logo-placeholder">OFFICE<br>LOGO</span>
+              <img id="overlay-logo" class="hidden" src="" alt="Office Logo">
+            </div>
+            
+            <div class="panel-text">
+              <div id="disp-survey-title" class="title-text">CROC SURVEY</div>
+              <div id="disp-coords" class="coords-text">📍 Waiting for GPS...</div>
+              <div id="disp-remarks" class="remarks-text">Remarks: </div>
+              <div id="disp-author" class="meta-text">Photo captured by: Inspector</div>
+              <div id="disp-datetime" class="meta-text">--/--/----, --:--:--</div>
+            </div>
+          </div>
+          <div class="panel-right">
+            <div id="compass-arrow" class="compass-icon">▲</div>
+            <div id="disp-compass" class="compass-text">N 0°</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bottom Control Bar -->
+      <div class="bottom-bar">
+        <div class="mode-selector">
+          <span id="mode-video" class="mode-opt">VIDEO</span>
+          <span id="mode-photo" class="mode-opt active">PHOTO</span>
+        </div>
+        <div class="shutter-container">
+          <button id="btn-library" class="thumb-btn">🖼️</button>
+          <button id="btn-shutter" class="shutter-btn"></button>
+          <button id="btn-switch-cam" class="icon-btn">🔄</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal: Shutter Remarks -->
+    <div id="modal-remarks" class="modal hidden">
+      <div class="modal-content">
+        <h3>Capture Remarks</h3>
+        <textarea id="input-remarks" placeholder="Enter remarks for this capture..."></textarea>
+        <div class="modal-actions">
+          <button id="btn-cancel-capture" class="btn-sec">Cancel</button>
+          <button id="btn-confirm-capture" class="btn-pri">Save Media</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Library Screen -->
+    <div id="library-screen" class="screen">
+      <div class="screen-header">
+        <button id="btn-close-lib" class="icon-btn">⬅️</button>
+        <h2>Media Library</h2>
+        <div></div>
+      </div>
+      <div class="export-bar">
+        <button id="btn-export-csv" class="btn-sec">Export CSV</button>
+        <button id="btn-export-geojson" class="btn-sec">Export GeoJSON</button>
+      </div>
+      <div id="library-grid" class="grid-container"></div>
+    </div>
+
+    <!-- Settings Screen -->
+    <div id="settings-screen" class="screen">
+      <div class="screen-header">
+        <button id="btn-close-settings" class="icon-btn">⬅️</button>
+        <h2>Settings</h2>
+        <div></div>
+      </div>
+      <div class="settings-form">
+        <label>Survey Title
+          <input type="text" id="setting-title" value="CROC SURVEY">
+        </label>
+        <label>Photo Captured By
+          <input type="text" id="setting-author" value="Inspector">
+        </label>
+        <label>Default Remarks Preset
+          <input type="text" id="setting-default-remarks" value="Field observation clear.">
+        </label>
+        <label>Upload Office / Agency Logo
+          <input type="file" id="setting-logo-file" accept="image/*">
+        </label>
+        <button id="btn-grant-sensors" class="btn-pri">Enable Motion/Orientation Sensors (iOS)</button>
+        <button id="btn-save-settings" class="btn-pri">Save Settings</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
