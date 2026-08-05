@@ -29,55 +29,18 @@ const state = {
   lastRemarks: 'Field observation clear.',
   logoImgObj: null,
   lat: null,
-  lng: null,
-  heading: 0,
-  cardinal: 'N'
+  lng: null
 };
 
 // UI Elements
 const videoEl = document.getElementById('video-preview');
+const viewportEl = document.getElementById('viewport-container');
 const btnShutter = document.getElementById('btn-shutter');
 const btnTorch = document.getElementById('btn-torch');
 const modalRemarks = document.getElementById('modal-remarks');
 const inputRemarks = document.getElementById('input-remarks');
-const viewportEl = document.getElementById('viewport-container'); // <-- ADD THIS LINE
 
-// Orientation / Compass Handler
-function handleOrientation(e) {
-  let compassHeading = null;
-  if (e.webkitCompassHeading) {
-    compassHeading = e.webkitCompassHeading;
-  } else if (e.alpha !== null) {
-    compassHeading = 360 - e.alpha;
-  }
-
-  if (compassHeading !== null) {
-    state.heading = Math.round(compassHeading);
-    state.cardinal = getCardinal(state.heading);
-    document.getElementById('compass-arrow').style.transform = `rotate(${state.heading}deg)`;
-    document.getElementById('disp-compass').innerText = `${state.cardinal} ${state.heading}°`;
-  }
-}
-
-function getCardinal(deg) {
-  const directions = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
-  return directions[Math.round(deg / 45) % 8];
-}
-
-// Request iOS Orientation Permission
-document.getElementById('btn-grant-sensors').addEventListener('click', async () => {
-  if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-    try {
-      const res = await DeviceOrientationEvent.requestPermission();
-      if (res === 'granted') {
-        window.addEventListener('deviceorientation', handleOrientation, true);
-        alert("Sensor permission granted.");
-      }
-    } catch (err) { alert("Permission error: " + err); }
-  } else {
-    alert("Standard orientation listener active.");
-  }
-});
+let videoAnimationFrame = null;
 
 // Geolocation Handler
 if ("geolocation" in navigator) {
@@ -85,7 +48,8 @@ if ("geolocation" in navigator) {
     (pos) => {
       state.lat = pos.coords.latitude.toFixed(6);
       state.lng = pos.coords.longitude.toFixed(6);
-      document.getElementById('disp-coords').innerText = `📍 ${state.lat}, ${state.lng}`;
+      const coordsEl = document.getElementById('disp-coords');
+      if (coordsEl) coordsEl.innerText = `📍 ${state.lat}, ${state.lng}`;
     },
     (err) => console.error(err),
     { enableHighAccuracy: true, maximumAge: 1000, timeout: 5000 }
@@ -95,7 +59,8 @@ if ("geolocation" in navigator) {
 // System Clock
 setInterval(() => {
   const now = new Date().toLocaleString();
-  document.getElementById('disp-datetime').innerText = now;
+  const dateEl = document.getElementById('disp-datetime');
+  if (dateEl) dateEl.innerText = now;
 }, 1000);
 
 // Initialize Camera
@@ -116,26 +81,21 @@ async function initCamera() {
   try {
     state.stream = await navigator.mediaDevices.getUserMedia(constraints);
     videoEl.srcObject = state.stream;
+    videoEl.play();
   } catch (err) {
     alert("Camera Access Error: " + err.message);
   }
 }
 
+// Safe Event Listener Helper
+const safeAddListener = (id, event, handler) => {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener(event, handler);
+};
+
 // Setup Event Listeners
 window.addEventListener('DOMContentLoaded', () => {
   initCamera();
-
-  if (window.DeviceOrientationEvent && !DeviceOrientationEvent.requestPermission) {
-    window.addEventListener('deviceorientation', handleOrientation, true);
-  }
-
-  // Safe Listener Attachment Helper
-  const safeAddListener = (id, event, handler) => {
-    const el = document.getElementById(id);
-    if (el) {
-      el.addEventListener(event, handler);
-    }
-  };
 
   // Torch Toggle
   safeAddListener('btn-torch', 'click', async () => {
@@ -150,7 +110,7 @@ window.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // Photo / Video Mode Switches
+  // Switch Mode
   safeAddListener('mode-photo', 'click', (e) => setMode('PHOTO', e.target));
   safeAddListener('mode-video', 'click', (e) => setMode('VIDEO', e.target));
 
@@ -161,9 +121,10 @@ window.addEventListener('DOMContentLoaded', () => {
     initCamera();
   }
 
-  // Shutter Press
+  // Shutter Press - Freeze Preview Video Feed on Photo Mode
   safeAddListener('btn-shutter', 'click', () => {
     if (state.mode === 'PHOTO') {
+      videoEl.pause(); // Freeze frame for preview review
       inputRemarks.value = state.lastRemarks;
       modalRemarks.classList.remove('hidden');
     } else {
@@ -171,16 +132,21 @@ window.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // Modal Action Buttons
+  // Modal Cancel - Resume Live Camera Feed
   safeAddListener('btn-cancel-capture', 'click', () => {
     modalRemarks.classList.add('hidden');
+    videoEl.play(); // Resume live feed without saving
   });
 
+  // Modal Save - Save Canvas and Resume Live Camera Feed
   safeAddListener('btn-confirm-capture', 'click', () => {
     modalRemarks.classList.add('hidden');
     state.lastRemarks = inputRemarks.value;
-    document.getElementById('disp-remarks').innerText = `Remarks: ${state.lastRemarks}`;
+    const remarksEl = document.getElementById('disp-remarks');
+    if (remarksEl) remarksEl.innerText = `Remarks: ${state.lastRemarks}`;
+    
     processAndSavePhoto();
+    videoEl.play(); // Resume live feed after snapshot canvas generation
   });
 
   // Switch Facing Camera
@@ -249,21 +215,15 @@ function switchScreen(id) {
   document.getElementById(id).classList.add('active');
 }
 
-// Canvas Watermarking & Uncropped Full 16:9 Capture
-// Canvas Watermarking & Viewport-Matched Capture
+// Canvas Watermarking & Viewport-Matched Photo Capture
 function processAndSavePhoto() {
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d');
 
-  // Safety fallback for viewport element
   const viewport = viewportEl || document.getElementById('viewport-container');
-
-
-  // 1. Get real-time viewport aspect ratio
-  const viewportRect = viewportEl.getBoundingClientRect();
+  const viewportRect = viewport.getBoundingClientRect();
   const targetAspect = viewportRect.width / viewportRect.height;
 
-  // 2. Set Canvas high-resolution dimensions matching viewport aspect ratio
   if (targetAspect >= 1) {
     canvas.width = 1920;
     canvas.height = Math.round(1920 / targetAspect);
@@ -272,7 +232,6 @@ function processAndSavePhoto() {
     canvas.width = Math.round(1920 * targetAspect);
   }
 
-  // 3. Compute cropping parameters (Object-Fit: Cover algorithm)
   const videoWidth = videoEl.videoWidth || 1920;
   const videoHeight = videoEl.videoHeight || 1080;
   const videoAspect = videoWidth / videoHeight;
@@ -280,27 +239,19 @@ function processAndSavePhoto() {
   let sx, sy, sWidth, sHeight;
 
   if (videoAspect > targetAspect) {
-    // Video stream is wider than viewport -> Crop sides
     sHeight = videoHeight;
     sWidth = videoHeight * targetAspect;
     sx = (videoWidth - sWidth) / 2;
     sy = 0;
   } else {
-    // Video stream is taller than viewport -> Crop top/bottom
     sWidth = videoWidth;
     sHeight = videoWidth / targetAspect;
     sx = 0;
     sy = (videoHeight - sHeight) / 2;
   }
 
-  // 4. Draw cropped stream onto canvas
-  ctx.drawImage(
-    videoEl,
-    sx, sy, sWidth, sHeight,  // Source crop area
-    0, 0, canvas.width, canvas.height // Canvas destination area
-  );
+  ctx.drawImage(videoEl, sx, sy, sWidth, sHeight, 0, 0, canvas.width, canvas.height);
 
-  // 5. Calculate proportional overlay styling relative to high-res canvas
   const scale = canvas.width / viewportRect.width;
 
   // Top Brand Tag
@@ -325,7 +276,6 @@ function processAndSavePhoto() {
 
   let textXOffset = 20 * scale;
 
-  // Draw Office Logo if uploaded
   if (state.logoImgObj) {
     const logoSize = 65 * scale;
     const logoY = panelY + ((panelHeight - logoSize) / 2);
@@ -333,7 +283,6 @@ function processAndSavePhoto() {
     textXOffset += logoSize + (15 * scale);
   }
 
-  // Text Metadata Output
   const timestamp = new Date().toLocaleString();
   
   ctx.fillStyle = "#FFFFFF";
@@ -342,7 +291,7 @@ function processAndSavePhoto() {
 
   ctx.fillStyle = "#76FF03";
   ctx.font = `bold ${16 * scale}px -apple-system, sans-serif`;
-  ctx.fillText(`📍 ${state.lat || '0.000000'}, ${state.lng || '0.000000'} | ${state.cardinal} ${state.heading}°`, textXOffset, panelY + (52 * scale));
+  ctx.fillText(`📍 ${state.lat || '0.000000'}, ${state.lng || '0.000000'}`, textXOffset, panelY + (52 * scale));
 
   ctx.fillStyle = "#DDDDDD";
   ctx.font = `${14 * scale}px -apple-system, sans-serif`;
@@ -352,7 +301,6 @@ function processAndSavePhoto() {
   ctx.font = `${12 * scale}px -apple-system, sans-serif`;
   ctx.fillText(`Photo captured by: ${state.author} | ${timestamp}`, textXOffset, panelY + (94 * scale));
 
-  // 6. Save and Download
   const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
   const record = {
     type: 'image',
@@ -360,8 +308,6 @@ function processAndSavePhoto() {
     title: state.surveyTitle,
     lat: state.lat,
     lng: state.lng,
-    heading: state.heading,
-    cardinal: state.cardinal,
     remarks: state.lastRemarks,
     author: state.author,
     timestamp: timestamp
@@ -371,16 +317,12 @@ function processAndSavePhoto() {
   downloadFile(dataUrl, `MUNDO_${Date.now()}.jpg`);
 }
 
-// Global Animation Frame ID for Video Watermark Loop
-let videoAnimationFrame = null;
-
-// 1. Continuous Canvas Frame Renderer for Live Video Recording
+// Video Canvas Frame Renderer
 function drawVideoFrameToCanvas(canvas, ctx) {
   const viewport = viewportEl || document.getElementById('viewport-container');
   const viewportRect = viewport.getBoundingClientRect();
   const targetAspect = viewportRect.width / viewportRect.height;
 
-  // Set recording canvas dimensions matching viewport aspect ratio
   if (targetAspect >= 1) {
     canvas.width = 1280;
     canvas.height = Math.round(1280 / targetAspect);
@@ -389,7 +331,6 @@ function drawVideoFrameToCanvas(canvas, ctx) {
     canvas.width = Math.round(1280 * targetAspect);
   }
 
-  // Compute object-fit crop math
   const videoWidth = videoEl.videoWidth || 1280;
   const videoHeight = videoEl.videoHeight || 720;
   const videoAspect = videoWidth / videoHeight;
@@ -408,13 +349,10 @@ function drawVideoFrameToCanvas(canvas, ctx) {
     sy = (videoHeight - sHeight) / 2;
   }
 
-  // Draw cropped frame
   ctx.drawImage(videoEl, sx, sy, sWidth, sHeight, 0, 0, canvas.width, canvas.height);
 
-  // Scaling factor for overlays
   const scale = canvas.width / viewportRect.width;
 
-  // Top Brand Pill
   const tagX = 15 * scale;
   const tagY = 15 * scale;
   const tagWidth = 160 * scale;
@@ -427,7 +365,6 @@ function drawVideoFrameToCanvas(canvas, ctx) {
   ctx.fillStyle = "#4CAF50";
   ctx.fillText("MUNDO GeoCam", tagX + (16 * scale), tagY + (24 * scale));
 
-  // Bottom Panel
   const panelHeight = 110 * scale;
   const panelY = canvas.height - panelHeight;
 
@@ -436,7 +373,6 @@ function drawVideoFrameToCanvas(canvas, ctx) {
 
   let textXOffset = 20 * scale;
 
-  // Office Logo
   if (state.logoImgObj) {
     const logoSize = 65 * scale;
     const logoY = panelY + ((panelHeight - logoSize) / 2);
@@ -444,7 +380,6 @@ function drawVideoFrameToCanvas(canvas, ctx) {
     textXOffset += logoSize + (15 * scale);
   }
 
-  // Live Metadata Overlay Text
   const timestamp = new Date().toLocaleString();
 
   ctx.fillStyle = "#FFFFFF";
@@ -453,7 +388,7 @@ function drawVideoFrameToCanvas(canvas, ctx) {
 
   ctx.fillStyle = "#76FF03";
   ctx.font = `bold ${16 * scale}px -apple-system, sans-serif`;
-  ctx.fillText(`📍 ${state.lat || '0.000000'}, ${state.lng || '0.000000'} | ${state.cardinal} ${state.heading}°`, textXOffset, panelY + (52 * scale));
+  ctx.fillText(`📍 ${state.lat || '0.000000'}, ${state.lng || '0.000000'}`, textXOffset, panelY + (52 * scale));
 
   ctx.fillStyle = "#DDDDDD";
   ctx.font = `${14 * scale}px -apple-system, sans-serif`;
@@ -463,34 +398,28 @@ function drawVideoFrameToCanvas(canvas, ctx) {
   ctx.font = `${12 * scale}px -apple-system, sans-serif`;
   ctx.fillText(`Recorded by: ${state.author} | ${timestamp}`, textXOffset, panelY + (94 * scale));
 
-  // Continue rendering loop if recording is active
   if (state.isRecording) {
     videoAnimationFrame = requestAnimationFrame(() => drawVideoFrameToCanvas(canvas, ctx));
   }
 }
 
-// 2. Updated Video Recording Control
+// Video Recording Operations
 function toggleVideoRecording() {
   if (!state.isRecording) {
     state.recordedChunks = [];
 
-    // Create offscreen recording canvas
     const recordCanvas = document.createElement('canvas');
     const ctx = recordCanvas.getContext('2d');
     state.isRecording = true;
 
-    // Start rendering video frames to canvas
     drawVideoFrameToCanvas(recordCanvas, ctx);
 
-    // Capture 30 FPS stream from the cropped canvas
     const canvasStream = recordCanvas.captureStream(30);
 
-    // Include audio track if available from mic stream
     if (state.stream && state.stream.getAudioTracks().length > 0) {
       canvasStream.addTrack(state.stream.getAudioTracks()[0]);
     }
 
-    // Determine supported mimeType
     const mimeType = MediaRecorder.isTypeSupported('video/mp4') 
       ? 'video/mp4' 
       : 'video/webm';
@@ -504,7 +433,6 @@ function toggleVideoRecording() {
 
     btnShutter.classList.add('recording');
   } else {
-    // Stop recording and cancel animation loop
     state.isRecording = false;
     if (videoAnimationFrame) cancelAnimationFrame(videoAnimationFrame);
     state.mediaRecorder.stop();
@@ -512,7 +440,6 @@ function toggleVideoRecording() {
   }
 }
 
-// 3. Save Processed Video File
 function saveVideo() {
   const mimeType = state.mediaRecorder.mimeType || 'video/webm';
   const ext = mimeType.includes('mp4') ? 'mp4' : 'webm';
@@ -526,8 +453,6 @@ function saveVideo() {
     title: state.surveyTitle,
     lat: state.lat,
     lng: state.lng,
-    heading: state.heading,
-    cardinal: state.cardinal,
     remarks: state.lastRemarks || state.defaultRemarks,
     author: state.author,
     timestamp: timestamp
@@ -552,13 +477,15 @@ function loadLibraryThumb() {
   req.onsuccess = (e) => {
     const cursor = e.target.result;
     if (cursor) {
-      document.getElementById('btn-library').style.backgroundImage = `url(${cursor.value.blobUrl})`;
+      const libBtn = document.getElementById('btn-library');
+      if (libBtn) libBtn.style.backgroundImage = `url(${cursor.value.blobUrl})`;
     }
   };
 }
 
 function renderLibrary() {
   const grid = document.getElementById('library-grid');
+  if (!grid) return;
   grid.innerHTML = '';
   const tx = db.transaction("captures", "readonly");
   tx.objectStore("captures").openCursor(null, 'prev').onsuccess = (e) => {
@@ -602,9 +529,9 @@ function exportCSV() {
       records.push(cursor.value);
       cursor.continue();
     } else {
-      let csv = "ID,Type,Title,Latitude,Longitude,Heading,Cardinal,Remarks,Author,Timestamp\n";
+      let csv = "ID,Type,Title,Latitude,Longitude,Remarks,Author,Timestamp\n";
       records.forEach(r => {
-        csv += `"${r.id}","${r.type}","${r.title}","${r.lat}","${r.lng}","${r.heading}","${r.cardinal}","${r.remarks}","${r.author}","${r.timestamp}"\n`;
+        csv += `"${r.id}","${r.type}","${r.title}","${r.lat}","${r.lng}","${r.remarks}","${r.author}","${r.timestamp}"\n`;
       });
       const blob = new Blob([csv], { type: 'text/csv' });
       downloadFile(URL.createObjectURL(blob), `MUNDO_Export_${Date.now()}.csv`);
@@ -630,8 +557,6 @@ function exportGeoJSON() {
             id: r.id,
             type: r.type,
             title: r.title,
-            heading: r.heading,
-            cardinal: r.cardinal,
             remarks: r.remarks,
             author: r.author,
             timestamp: r.timestamp

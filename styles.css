@@ -229,7 +229,7 @@ body, html {
   width: 50px;
   height: 50px;
   border-radius: 6px;
-  border: 0px solid #444;
+  border: 1px solid #444;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -239,8 +239,8 @@ body, html {
 
 
 .icon-btn {
-  width: 50px;
-  height: 50px;
+  width: 30px;
+  height: 30px;
   border-radius: 6px;
   border: 0px solid #444;
   display: flex;
@@ -250,8 +250,38 @@ body, html {
   background-size: cover;
 }
 
+#btn-switch-cam.icon-btn {
+    width: 50px;      /* Adjust as needed */
+    height: 50px;
+    object-fit: contain;
+    pointer-events: none;
+}
 
+#btn-switch-cam.icon-btn img {
+    width: 80%;      /* Adjust as needed */
+    height: 80%;
+    object-fit: contain;
+    pointer-events: none;
+}
 
+#btn-torch.icon-btn img, #btn-settings.icon-btn img {
+    width: 100%;      /* Adjust as needed */
+    height: 100%;
+    object-fit: contain;
+    pointer-events: none;
+}
+
+.btn-torch, .btn-settings {
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+  border: 0px solid #444;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background-size: cover;
+}
 /* Handling Landscape Responsiveness (Moves only overlays/panels smoothly) */
 @media screen and (orientation: landscape) {
   #camera-screen {
@@ -300,8 +330,17 @@ body, html {
     flex-direction: column;
     justify-content: center;
     align-items: center;
-    gap: 20px;
+    gap: 70px;
   }
+
+  #btn-switch-cam.icon-btn img {
+    width: 80%;      /* Adjust as needed */
+    height: 80%;
+    object-fit: contain;
+    pointer-events: none;
+  
+     transform: rotate(-90deg);
+}
 
   .bottom-panel {
     width: 100%; /* Align to the left of shutter control bar */
@@ -318,6 +357,18 @@ body, html {
     position:absolute;
     top: 30px;
     left: 10px;     /* Adjust manually */
+}
+
+#btn-library {
+    order: 3;
+}
+
+#btn-shutter {
+    order: 2;
+}
+
+#btn-switch-cam {
+    order: 1;
 }
 }
 
