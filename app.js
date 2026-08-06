@@ -120,16 +120,19 @@ async function initCamera() {
     videoEl.srcObject = null;
   }
 
+  // Small release delay: some browsers (notably iOS Safari) need a beat
+  // after stopping old tracks before a new camera will be handed off.
+  await new Promise(resolve => setTimeout(resolve, 150));
+
   // 2. Build constraints based on facingMode or explicit deviceId
-  let videoConstraints = {};
-
-videoConstraints = {
-    facingMode: state.facingMode
-};
-
-  // Add resolution preferences
-  videoConstraints.width = { ideal: 1920 };
-  videoConstraints.height = { ideal: 1080 };
+  // Use `exact` on the primary attempt so switching cameras is actually
+  // enforced rather than treated as a soft preference the browser can
+  // override in favor of other constraints (like resolution).
+  let videoConstraints = {
+    facingMode: { exact: state.facingMode },
+    width: { ideal: 1920 },
+    height: { ideal: 1080 }
+  };
 
   try {
     state.stream = await navigator.mediaDevices.getUserMedia({
@@ -139,7 +142,7 @@ videoConstraints = {
 
     videoEl.srcObject = state.stream;
     await videoEl.play();
-
+    
     const track = state.stream.getVideoTracks()[0];
 console.log("Current Camera Settings:", track.getSettings());
 
@@ -149,15 +152,21 @@ console.log("Current Camera Settings:", track.getSettings());
       state.currentDeviceId = currentTrack.getSettings().deviceId;
     }
   } catch (err) {
-    console.warn("Primary camera constraint failed, attempting basic fallback:", err);
+    console.warn("Exact facingMode failed (device may lack that camera), falling back to ideal:", err);
     try {
-      // General fallback if exact deviceId or ideal facingMode fails
+      // Loose fallback: only reached if there's genuinely no camera
+      // matching the requested facing mode (e.g. single-camera device).
       state.stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: state.facingMode },
         audio: state.mode === 'VIDEO'
       });
       videoEl.srcObject = state.stream;
       await videoEl.play();
+
+      const currentTrack = state.stream.getVideoTracks()[0];
+      if (currentTrack && currentTrack.getSettings) {
+        state.currentDeviceId = currentTrack.getSettings().deviceId;
+      }
     } catch (fallbackErr) {
       alert("Unable to access camera: " + fallbackErr.message);
     }
@@ -227,9 +236,36 @@ window.addEventListener('DOMContentLoaded', () => {
   });
 
  // Switch Facing Camera Handler
-safeAddListener('btn-switch-cam', 'click', async () => {
+safeAddListener("btn-switch-cam", "click", async () => {
 
-    alert("Switch button clicked!");
+    console.log("BUTTON CLICKED");
+
+    console.log("Current facing:", state.facingMode);
+
+    state.facingMode =
+        state.facingMode === "environment"
+        ? "user"
+        : "environment";
+
+    console.log("New facing:", state.facingMode);
+
+    try{
+
+        if(state.stream){
+            state.stream.getTracks().forEach(t=>t.stop());
+        }
+
+        state.currentDeviceId = null;
+
+        await initCamera();
+
+        console.log("Camera restarted.");
+
+    }catch(err){
+
+        console.error(err);
+
+    }
 
 });
 
