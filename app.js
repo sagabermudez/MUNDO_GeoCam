@@ -142,6 +142,7 @@ async function initCamera() {
 
     videoEl.srcObject = state.stream;
     await videoEl.play();
+    videoEl.classList.toggle('mirrored', state.facingMode === 'user');
     
     const track = state.stream.getVideoTracks()[0];
 console.log("Current Camera Settings:", track.getSettings());
@@ -162,6 +163,7 @@ console.log("Current Camera Settings:", track.getSettings());
       });
       videoEl.srcObject = state.stream;
       await videoEl.play();
+      videoEl.classList.toggle('mirrored', state.facingMode === 'user');
 
       const currentTrack = state.stream.getVideoTracks()[0];
       if (currentTrack && currentTrack.getSettings) {
@@ -381,7 +383,16 @@ function processAndSavePhoto() {
     sy = (videoHeight - sHeight) / 2;
   }
 
-  ctx.drawImage(videoEl, sx, sy, sWidth, sHeight, 0, 0, canvas.width, canvas.height);
+  if (state.facingMode === 'user') {
+    // Mirror only the camera image, matching the mirrored preview.
+    ctx.save();
+    ctx.translate(canvas.width, 0);
+    ctx.scale(-1, 1);
+    ctx.drawImage(videoEl, sx, sy, sWidth, sHeight, 0, 0, canvas.width, canvas.height);
+    ctx.restore();
+  } else {
+    ctx.drawImage(videoEl, sx, sy, sWidth, sHeight, 0, 0, canvas.width, canvas.height);
+  }
 
   const scale = canvas.width / viewportRect.width;
 
@@ -480,7 +491,16 @@ function drawVideoFrameToCanvas(canvas, ctx) {
     sy = (videoHeight - sHeight) / 2;
   }
 
-  ctx.drawImage(videoEl, sx, sy, sWidth, sHeight, 0, 0, canvas.width, canvas.height);
+  if (state.facingMode === 'user') {
+    // Mirror only the camera image, matching the mirrored preview.
+    ctx.save();
+    ctx.translate(canvas.width, 0);
+    ctx.scale(-1, 1);
+    ctx.drawImage(videoEl, sx, sy, sWidth, sHeight, 0, 0, canvas.width, canvas.height);
+    ctx.restore();
+  } else {
+    ctx.drawImage(videoEl, sx, sy, sWidth, sHeight, 0, 0, canvas.width, canvas.height);
+  }
 
   const scale = canvas.width / viewportRect.width;
 
