@@ -254,7 +254,7 @@ body, html {
     width: 50px;      /* Adjust as needed */
     height: 50px;
     object-fit: contain;
-    pointer-events: none;
+    pointer-events: auto;
 }
 
 #btn-switch-cam.icon-btn img {
