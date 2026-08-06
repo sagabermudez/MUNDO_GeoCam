@@ -1,13 +1,20 @@
 // Database Setup
 let db;
-const dbReq = indexedDB.open("MUNDOGeoCamDB", 1);
+const dbReq = indexedDB.open("MUNDOGeoCamDB", 2);
 dbReq.onupgradeneeded = (e) => {
   db = e.target.result;
   if (!db.objectStoreNames.contains("captures")) {
     db.createObjectStore("captures", { keyPath: "id", autoIncrement: true });
   }
+  if (!db.objectStoreNames.contains("settings")) {
+    db.createObjectStore("settings", { keyPath: "key" });
+  }
 };
-dbReq.onsuccess = (e) => { db = e.target.result; loadLibraryThumb(); };
+dbReq.onsuccess = (e) => { 
+  db = e.target.result; 
+  loadSavedSettings();
+  loadLibraryThumb(); 
+};
 
 // Register Service Worker
 if ('serviceWorker' in navigator) {
@@ -23,10 +30,10 @@ const state = {
   mediaRecorder: null,
   recordedChunks: [],
   isRecording: false,
-  surveyTitle: 'CROC SURVEY',
-  author: 'Inspector',
-  defaultRemarks: 'Field observation clear.',
-  lastRemarks: 'Field observation clear.',
+  surveyTitle: localStorage.getItem('geo_surveyTitle') || 'CROC SURVEY',
+  author: localStorage.getItem('geo_author') || 'Inspector',
+  defaultRemarks: localStorage.getItem('geo_defaultRemarks') || 'Field observation clear.',
+  lastRemarks: localStorage.getItem('geo_defaultRemarks') || 'Field observation clear.',
   logoImgObj: null,
   lat: null,
   lng: null
@@ -36,11 +43,53 @@ const state = {
 const videoEl = document.getElementById('video-preview');
 const viewportEl = document.getElementById('viewport-container');
 const btnShutter = document.getElementById('btn-shutter');
-const btnTorch = document.getElementById('btn-torch');
 const modalRemarks = document.getElementById('modal-remarks');
 const inputRemarks = document.getElementById('input-remarks');
 
 let videoAnimationFrame = null;
+
+// Load Persisted Settings & Logo on Startup
+function loadSavedSettings() {
+  // Update inputs
+  const titleInput = document.getElementById('setting-title');
+  const authorInput = document.getElementById('setting-author');
+  const remarksInput = document.getElementById('setting-default-remarks');
+
+  if (titleInput) titleInput.value = state.surveyTitle;
+  if (authorInput) authorInput.value = state.author;
+  if (remarksInput) remarksInput.value = state.defaultRemarks;
+
+  // Update overlay displays
+  if (document.getElementById('disp-survey-title')) {
+    document.getElementById('disp-survey-title').innerText = state.surveyTitle;
+  }
+  if (document.getElementById('disp-author')) {
+    document.getElementById('disp-author').innerText = `Photo captured by: ${state.author}`;
+  }
+  if (document.getElementById('disp-remarks')) {
+    document.getElementById('disp-remarks').innerText = `Remarks: ${state.defaultRemarks}`;
+  }
+
+  // Load Logo from IndexedDB
+  if (!db) return;
+  const tx = db.transaction("settings", "readonly");
+  const req = tx.objectStore("settings").get("office_logo");
+  req.onsuccess = (e) => {
+    if (req.result && req.result.value) {
+      const dataUrl = req.result.value;
+      const logoImg = document.getElementById('overlay-logo');
+      if (logoImg) {
+        logoImg.src = dataUrl;
+        logoImg.classList.remove('hidden');
+      }
+      document.getElementById('logo-placeholder')?.classList.add('hidden');
+
+      const img = new Image();
+      img.src = dataUrl;
+      img.onload = () => { state.logoImgObj = img; };
+    }
+  };
+}
 
 // Geolocation Handler
 if ("geolocation" in navigator) {
@@ -63,15 +112,18 @@ setInterval(() => {
   if (dateEl) dateEl.innerText = now;
 }, 1000);
 
-// Initialize Camera
+// Initialize Camera with Clean Stream Teardown
 async function initCamera() {
   if (state.stream) {
-    state.stream.getTracks().forEach(t => t.stop());
+    state.stream.getTracks().forEach(track => {
+      track.stop();
+    });
+    videoEl.srcObject = null;
   }
 
   const constraints = {
     video: {
-      facingMode: state.facingMode,
+      facingMode: { exact: state.facingMode },
       width: { ideal: 1920 },
       height: { ideal: 1080 }
     },
@@ -81,9 +133,17 @@ async function initCamera() {
   try {
     state.stream = await navigator.mediaDevices.getUserMedia(constraints);
     videoEl.srcObject = state.stream;
-    videoEl.play();
+    await videoEl.play();
   } catch (err) {
-    alert("Camera Access Error: " + err.message);
+    // Fallback if 'exact' facingMode fails on some mobile browsers
+    try {
+      constraints.video.facingMode = state.facingMode;
+      state.stream = await navigator.mediaDevices.getUserMedia(constraints);
+      videoEl.srcObject = state.stream;
+      await videoEl.play();
+    } catch (fallbackErr) {
+      alert("Camera Access Error: " + fallbackErr.message);
+    }
   }
 }
 
@@ -121,10 +181,10 @@ window.addEventListener('DOMContentLoaded', () => {
     initCamera();
   }
 
-  // Shutter Press - Freeze Preview Video Feed on Photo Mode
+  // Shutter Press
   safeAddListener('btn-shutter', 'click', () => {
     if (state.mode === 'PHOTO') {
-      videoEl.pause(); // Freeze frame for preview review
+      videoEl.pause();
       inputRemarks.value = state.lastRemarks;
       modalRemarks.classList.remove('hidden');
     } else {
@@ -132,13 +192,13 @@ window.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // Modal Cancel - Resume Live Camera Feed
+  // Modal Cancel
   safeAddListener('btn-cancel-capture', 'click', () => {
     modalRemarks.classList.add('hidden');
-    videoEl.play(); // Resume live feed without saving
+    videoEl.play();
   });
 
-  // Modal Save - Save Canvas and Resume Live Camera Feed
+  // Modal Save
   safeAddListener('btn-confirm-capture', 'click', () => {
     modalRemarks.classList.add('hidden');
     state.lastRemarks = inputRemarks.value;
@@ -146,13 +206,15 @@ window.addEventListener('DOMContentLoaded', () => {
     if (remarksEl) remarksEl.innerText = `Remarks: ${state.lastRemarks}`;
     
     processAndSavePhoto();
-    videoEl.play(); // Resume live feed after snapshot canvas generation
+    videoEl.play();
   });
 
-  // Switch Facing Camera
-  safeAddListener('btn-switch-cam', 'click', () => {
-    state.facingMode = state.facingMode === 'environment' ? 'user' : 'environment';
-    initCamera();
+  // Switch Facing Camera (Fixed implementation)
+  safeAddListener('btn-switch-cam', 'click', async () => {
+    state.facingMode = (state.facingMode === 'environment' || state.facingMode === 'user') 
+      ? (state.facingMode === 'environment' ? 'user' : 'environment') 
+      : 'environment';
+    await initCamera();
   });
 
   // Navigation Screens
@@ -164,15 +226,24 @@ window.addEventListener('DOMContentLoaded', () => {
   });
   safeAddListener('btn-close-lib', 'click', () => switchScreen('camera-screen'));
 
-  // Save Settings & Logo
+  // Save Settings & Logo persistently
   safeAddListener('btn-save-settings', 'click', () => {
     const titleInput = document.getElementById('setting-title');
     const authorInput = document.getElementById('setting-author');
     const remarksInput = document.getElementById('setting-default-remarks');
 
-    if (titleInput) state.surveyTitle = titleInput.value.toUpperCase();
-    if (authorInput) state.author = authorInput.value;
-    if (remarksInput) state.defaultRemarks = remarksInput.value;
+    if (titleInput) {
+      state.surveyTitle = titleInput.value.toUpperCase();
+      localStorage.setItem('geo_surveyTitle', state.surveyTitle);
+    }
+    if (authorInput) {
+      state.author = authorInput.value;
+      localStorage.setItem('geo_author', state.author);
+    }
+    if (remarksInput) {
+      state.defaultRemarks = remarksInput.value;
+      localStorage.setItem('geo_defaultRemarks', state.defaultRemarks);
+    }
     state.lastRemarks = state.defaultRemarks;
 
     if (document.getElementById('disp-survey-title')) {
@@ -189,19 +260,27 @@ window.addEventListener('DOMContentLoaded', () => {
     if (logoFile) {
       const reader = new FileReader();
       reader.onload = (e) => {
+        const dataUrl = e.target.result;
         const logoImg = document.getElementById('overlay-logo');
         if (logoImg) {
-          logoImg.src = e.target.result;
+          logoImg.src = dataUrl;
           logoImg.classList.remove('hidden');
         }
         document.getElementById('logo-placeholder')?.classList.add('hidden');
 
         const img = new Image();
-        img.src = e.target.result;
+        img.src = dataUrl;
         img.onload = () => { state.logoImgObj = img; };
+
+        // Store Logo Data in IndexedDB
+        if (db) {
+          const tx = db.transaction("settings", "readwrite");
+          tx.objectStore("settings").put({ key: "office_logo", value: dataUrl });
+        }
       };
       reader.readAsDataURL(logoFile);
     }
+
     switchScreen('camera-screen');
   });
 
@@ -483,13 +562,11 @@ function loadLibraryThumb() {
     if (cursor) {
       libBtn.style.backgroundImage = `url(${cursor.value.blobUrl})`;
     } else {
-      // Clear thumbnail if database is empty
       libBtn.style.backgroundImage = 'none';
     }
   };
 }
 
-// Render Media Library with Delete Option
 function renderLibrary() {
   const grid = document.getElementById('library-grid');
   if (!grid) return;
@@ -504,11 +581,11 @@ function renderLibrary() {
       el.className = 'grid-item';
 
       const mediaHtml = item.type === 'image' 
-        ? `<img src="${item.blobUrl}" alt="${item.title}">` 
+        ? `<img src="${item.blobUrl}">` 
         : `<video src="${item.blobUrl}" controls></video>`;
 
       el.innerHTML = `
-        <button class="btn-delete" data-id="${item.id}" title="Delete Item">🗑️</button>
+        <button class="btn-delete" data-id="${item.id}">🗑️</button>
         ${mediaHtml}
         <div class="grid-info">
           <strong>${item.title}</strong><br>
@@ -518,10 +595,9 @@ function renderLibrary() {
         </div>
       `;
 
-      // Attach listener to delete button
       el.querySelector('.btn-delete').addEventListener('click', (ev) => {
         ev.stopPropagation();
-        if (confirm("Are you sure you want to delete this capture?")) {
+        if (confirm("Delete this capture?")) {
           deleteCapture(item.id);
         }
       });
@@ -532,18 +608,14 @@ function renderLibrary() {
   };
 }
 
-// Delete Record from IndexedDB
 function deleteCapture(id) {
   const tx = db.transaction("captures", "readwrite");
-  const store = tx.objectStore("captures");
-  
-  store.delete(id).onsuccess = () => {
-    renderLibrary();    // Refresh grid display
-    loadLibraryThumb(); // Update shutter thumbnail preview
+  tx.objectStore("captures").delete(id).onsuccess = () => {
+    renderLibrary();
+    loadLibraryThumb();
   };
 }
 
-// File Downloads & Exports
 function downloadFile(url, filename) {
   const a = document.createElement('a');
   a.href = url;
