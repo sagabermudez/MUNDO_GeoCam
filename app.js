@@ -139,7 +139,7 @@ videoConstraints = {
 
     videoEl.srcObject = state.stream;
     await videoEl.play();
-    
+
     const track = state.stream.getVideoTracks()[0];
 console.log("Current Camera Settings:", track.getSettings());
 
@@ -227,36 +227,9 @@ window.addEventListener('DOMContentLoaded', () => {
   });
 
  // Switch Facing Camera Handler
-safeAddListener("btn-switch-cam", "click", async () => {
+safeAddListener('btn-switch-cam', 'click', async () => {
 
-    console.log("BUTTON CLICKED");
-
-    console.log("Current facing:", state.facingMode);
-
-    state.facingMode =
-        state.facingMode === "environment"
-        ? "user"
-        : "environment";
-
-    console.log("New facing:", state.facingMode);
-
-    try{
-
-        if(state.stream){
-            state.stream.getTracks().forEach(t=>t.stop());
-        }
-
-        state.currentDeviceId = null;
-
-        await initCamera();
-
-        console.log("Camera restarted.");
-
-    }catch(err){
-
-        console.error(err);
-
-    }
+    alert("Switch button clicked!");
 
 });
 
