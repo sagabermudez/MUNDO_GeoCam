@@ -112,18 +112,21 @@ setInterval(() => {
   if (dateEl) dateEl.innerText = now;
 }, 1000);
 
-// Initialize Camera with Clean Stream Teardown
+// Initialize Camera with Flexible Switch Fallback
 async function initCamera() {
+  // 1. Explicitly stop all active video and audio tracks
   if (state.stream) {
-    state.stream.getTracks().forEach(track => {
-      track.stop();
-    });
+    state.stream.getTracks().forEach(track => track.stop());
     videoEl.srcObject = null;
   }
 
-  const constraints = {
+  // Determine target facing mode
+  const targetFacing = state.facingMode; // 'user' or 'environment'
+
+  // Attempt 1: Try flexible facing mode constraint (broad compatibility)
+  let constraints = {
     video: {
-      facingMode: { exact: state.facingMode },
+      facingMode: targetFacing,
       width: { ideal: 1920 },
       height: { ideal: 1080 }
     },
@@ -134,16 +137,46 @@ async function initCamera() {
     state.stream = await navigator.mediaDevices.getUserMedia(constraints);
     videoEl.srcObject = state.stream;
     await videoEl.play();
+    return;
   } catch (err) {
-    // Fallback if 'exact' facingMode fails on some mobile browsers
-    try {
-      constraints.video.facingMode = state.facingMode;
-      state.stream = await navigator.mediaDevices.getUserMedia(constraints);
+    console.warn("Standard facingMode failed, trying exact match fallback...", err);
+  }
+
+  // Attempt 2: Try exact facing mode constraint
+  try {
+    constraints.video.facingMode = { exact: targetFacing };
+    state.stream = await navigator.mediaDevices.getUserMedia(constraints);
+    videoEl.srcObject = state.stream;
+    await videoEl.play();
+    return;
+  } catch (err) {
+    console.warn("Exact facingMode failed, enumerating devices by deviceId...", err);
+  }
+
+  // Attempt 3: Direct Device ID Enumeration (Guaranteed hardware-level selection)
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const videoDevices = devices.filter(d => d.kind === 'videoinput');
+
+    if (videoDevices.length > 0) {
+      // Find a device matching 'front'/'user' or 'back'/'environment' in its label
+      const matchedDevice = videoDevices.find(d => {
+        const label = d.label.toLowerCase();
+        return targetFacing === 'user' 
+          ? (label.includes('front') || label.includes('user') || label.includes('selfie'))
+          : (label.includes('back') || label.includes('environment') || label.includes('rear'));
+      }) || videoDevices[targetFacing === 'user' ? 0 : videoDevices.length - 1];
+
+      state.stream = await navigator.mediaDevices.getUserMedia({
+        video: { deviceId: { exact: matchedDevice.deviceId } },
+        audio: state.mode === 'VIDEO'
+      });
       videoEl.srcObject = state.stream;
       await videoEl.play();
-    } catch (fallbackErr) {
-      alert("Camera Access Error: " + fallbackErr.message);
     }
+  } catch (finalErr) {
+    alert("Camera Switch Error: Unable to access " + targetFacing + " camera.");
+    console.error(finalErr);
   }
 }
 
