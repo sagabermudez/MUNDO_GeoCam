@@ -30,7 +30,7 @@ const state = {
   mediaRecorder: null,
   recordedChunks: [],
   isRecording: false,
-  surveyTitle: localStorage.getItem('geo_surveyTitle') || 'CROC SURVEY',
+  surveyTitle: localStorage.getItem('geo_surveyTitle') || 'PROJECT',
   author: localStorage.getItem('geo_author') || 'Inspector',
   defaultRemarks: localStorage.getItem('geo_defaultRemarks') || 'Field observation clear.',
   lastRemarks: localStorage.getItem('geo_defaultRemarks') || 'Field observation clear.',
