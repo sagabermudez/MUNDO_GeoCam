@@ -112,71 +112,56 @@ setInterval(() => {
   if (dateEl) dateEl.innerText = now;
 }, 1000);
 
-// Initialize Camera with Flexible Switch Fallback
+// Initialize Camera with explicit DeviceID targeting
 async function initCamera() {
-  // 1. Explicitly stop all active video and audio tracks
+  // Stop all active stream tracks before requesting a new device
   if (state.stream) {
     state.stream.getTracks().forEach(track => track.stop());
     videoEl.srcObject = null;
   }
 
-  // Determine target facing mode
-  const targetFacing = state.facingMode; // 'user' or 'environment'
-
-  // Attempt 1: Try flexible facing mode constraint (broad compatibility)
-  let constraints = {
-    video: {
-      facingMode: targetFacing,
-      width: { ideal: 1920 },
-      height: { ideal: 1080 }
-    },
-    audio: state.mode === 'VIDEO'
+  // Fallback to basic string constraint if deviceId isn't explicitly set yet
+  let videoConstraints = {
+    facingMode: state.facingMode,
+    width: { ideal: 1920 },
+    height: { ideal: 1080 }
   };
 
-  try {
-    state.stream = await navigator.mediaDevices.getUserMedia(constraints);
-    videoEl.srcObject = state.stream;
-    await videoEl.play();
-    return;
-  } catch (err) {
-    console.warn("Standard facingMode failed, trying exact match fallback...", err);
+  // If a specific camera device ID is known, target it directly
+  if (state.currentDeviceId) {
+    videoConstraints = {
+      deviceId: { exact: state.currentDeviceId },
+      width: { ideal: 1920 },
+      height: { ideal: 1080 }
+    };
   }
 
-  // Attempt 2: Try exact facing mode constraint
   try {
-    constraints.video.facingMode = { exact: targetFacing };
-    state.stream = await navigator.mediaDevices.getUserMedia(constraints);
+    state.stream = await navigator.mediaDevices.getUserMedia({
+      video: videoConstraints,
+      audio: state.mode === 'VIDEO'
+    });
+    
     videoEl.srcObject = state.stream;
     await videoEl.play();
-    return;
+
+    // Cache current track deviceId
+    const currentTrack = state.stream.getVideoTracks()[0];
+    if (currentTrack && currentTrack.getSettings) {
+      state.currentDeviceId = currentTrack.getSettings().deviceId;
+    }
   } catch (err) {
-    console.warn("Exact facingMode failed, enumerating devices by deviceId...", err);
-  }
-
-  // Attempt 3: Direct Device ID Enumeration (Guaranteed hardware-level selection)
-  try {
-    const devices = await navigator.mediaDevices.enumerateDevices();
-    const videoDevices = devices.filter(d => d.kind === 'videoinput');
-
-    if (videoDevices.length > 0) {
-      // Find a device matching 'front'/'user' or 'back'/'environment' in its label
-      const matchedDevice = videoDevices.find(d => {
-        const label = d.label.toLowerCase();
-        return targetFacing === 'user' 
-          ? (label.includes('front') || label.includes('user') || label.includes('selfie'))
-          : (label.includes('back') || label.includes('environment') || label.includes('rear'));
-      }) || videoDevices[targetFacing === 'user' ? 0 : videoDevices.length - 1];
-
+    // Safety fallback for strict mobile browser permissions
+    try {
       state.stream = await navigator.mediaDevices.getUserMedia({
-        video: { deviceId: { exact: matchedDevice.deviceId } },
+        video: { facingMode: state.facingMode },
         audio: state.mode === 'VIDEO'
       });
       videoEl.srcObject = state.stream;
       await videoEl.play();
+    } catch (fallbackErr) {
+      alert("Camera Switch Error: " + fallbackErr.message);
     }
-  } catch (finalErr) {
-    alert("Camera Switch Error: Unable to access " + targetFacing + " camera.");
-    console.error(finalErr);
   }
 }
 
@@ -242,14 +227,36 @@ window.addEventListener('DOMContentLoaded', () => {
     videoEl.play();
   });
 
-  // Switch Facing Camera (Fixed implementation)
+ // Switch Facing Camera (Device Enumeration Fix)
   safeAddListener('btn-switch-cam', 'click', async () => {
-    state.facingMode = (state.facingMode === 'environment' || state.facingMode === 'user') 
-      ? (state.facingMode === 'environment' ? 'user' : 'environment') 
-      : 'environment';
-    await initCamera();
-  });
+    try {
+      // Toggle state parameter
+      state.facingMode = state.facingMode === 'environment' ? 'user' : 'environment';
 
+      // Enumerate available devices on mobile hardware
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const videoDevices = devices.filter(d => d.kind === 'videoinput');
+
+      if (videoDevices.length > 1) {
+        // Find alternative camera device ID
+        const nextDevice = videoDevices.find(d => d.deviceId !== state.currentDeviceId);
+        if (nextDevice) {
+          state.currentDeviceId = nextDevice.deviceId;
+        } else {
+          state.currentDeviceId = null;
+        }
+      } else {
+        state.currentDeviceId = null;
+      }
+
+      await initCamera();
+    } catch (e) {
+      console.error("Camera switch failed:", e);
+      state.currentDeviceId = null;
+      await initCamera();
+    }
+  });
+  
   // Navigation Screens
   safeAddListener('btn-settings', 'click', () => switchScreen('settings-screen'));
   safeAddListener('btn-close-settings', 'click', () => switchScreen('camera-screen'));
