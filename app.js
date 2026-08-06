@@ -27,7 +27,7 @@ const state = {
   facingMode: 'environment',
   torchOn: false,
   stream: null,
-  mediaRecorder: null,
+  currentDeviceId: null, 
   recordedChunks: [],
   isRecording: false,
   surveyTitle: localStorage.getItem('geo_surveyTitle') || 'PROJECT',
@@ -112,47 +112,45 @@ setInterval(() => {
   if (dateEl) dateEl.innerText = now;
 }, 1000);
 
-// Initialize Camera with explicit DeviceID targeting
+// Initialize Camera Stream
 async function initCamera() {
-  // Stop all active stream tracks before requesting a new device
+  // 1. Fully release active stream tracks
   if (state.stream) {
     state.stream.getTracks().forEach(track => track.stop());
     videoEl.srcObject = null;
   }
 
-  // Fallback to basic string constraint if deviceId isn't explicitly set yet
-  let videoConstraints = {
-    facingMode: state.facingMode,
-    width: { ideal: 1920 },
-    height: { ideal: 1080 }
-  };
+  // 2. Build constraints based on facingMode or explicit deviceId
+  let videoConstraints = {};
 
-  // If a specific camera device ID is known, target it directly
   if (state.currentDeviceId) {
-    videoConstraints = {
-      deviceId: { exact: state.currentDeviceId },
-      width: { ideal: 1920 },
-      height: { ideal: 1080 }
-    };
+    videoConstraints = { deviceId: { exact: state.currentDeviceId } };
+  } else {
+    videoConstraints = { facingMode: { ideal: state.facingMode } };
   }
+
+  // Add resolution preferences
+  videoConstraints.width = { ideal: 1920 };
+  videoConstraints.height = { ideal: 1080 };
 
   try {
     state.stream = await navigator.mediaDevices.getUserMedia({
       video: videoConstraints,
       audio: state.mode === 'VIDEO'
     });
-    
+
     videoEl.srcObject = state.stream;
     await videoEl.play();
 
-    // Cache current track deviceId
+    // Store active deviceId
     const currentTrack = state.stream.getVideoTracks()[0];
     if (currentTrack && currentTrack.getSettings) {
       state.currentDeviceId = currentTrack.getSettings().deviceId;
     }
   } catch (err) {
-    // Safety fallback for strict mobile browser permissions
+    console.warn("Primary camera constraint failed, attempting basic fallback:", err);
     try {
+      // General fallback if exact deviceId or ideal facingMode fails
       state.stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: state.facingMode },
         audio: state.mode === 'VIDEO'
@@ -160,7 +158,7 @@ async function initCamera() {
       videoEl.srcObject = state.stream;
       await videoEl.play();
     } catch (fallbackErr) {
-      alert("Camera Switch Error: " + fallbackErr.message);
+      alert("Unable to access camera: " + fallbackErr.message);
     }
   }
 }
@@ -227,36 +225,33 @@ window.addEventListener('DOMContentLoaded', () => {
     videoEl.play();
   });
 
- // Switch Facing Camera (Device Enumeration Fix)
+ // Switch Facing Camera Handler
   safeAddListener('btn-switch-cam', 'click', async () => {
-    try {
-      // Toggle state parameter
-      state.facingMode = state.facingMode === 'environment' ? 'user' : 'environment';
+    // 1. Toggle requested facingMode
+    state.facingMode = state.facingMode === 'environment' ? 'user' : 'environment';
 
-      // Enumerate available devices on mobile hardware
+    try {
+      // 2. Query available devices
       const devices = await navigator.mediaDevices.enumerateDevices();
       const videoDevices = devices.filter(d => d.kind === 'videoinput');
 
       if (videoDevices.length > 1) {
-        // Find alternative camera device ID
+        // Pick the next available camera that isn't the currently active device
         const nextDevice = videoDevices.find(d => d.deviceId !== state.currentDeviceId);
-        if (nextDevice) {
-          state.currentDeviceId = nextDevice.deviceId;
-        } else {
-          state.currentDeviceId = null;
-        }
+        state.currentDeviceId = nextDevice ? nextDevice.deviceId : null;
       } else {
+        // If deviceId enumeration isn't clear, reset deviceId and rely on facingMode state
         state.currentDeviceId = null;
       }
-
-      await initCamera();
     } catch (e) {
-      console.error("Camera switch failed:", e);
+      console.warn("Could not enumerate camera devices:", e);
       state.currentDeviceId = null;
-      await initCamera();
     }
+
+    // 3. Re-initialize stream with new camera
+    await initCamera();
   });
-  
+
   // Navigation Screens
   safeAddListener('btn-settings', 'click', () => switchScreen('settings-screen'));
   safeAddListener('btn-close-settings', 'click', () => switchScreen('camera-screen'));
@@ -396,7 +391,7 @@ function processAndSavePhoto() {
   let textXOffset = 20 * scale;
 
   if (state.logoImgObj) {
-    const logoSize = 65 * scale;
+    const logoSize = 70 * scale;
     const logoY = panelY + ((panelHeight - logoSize) / 2);
     ctx.drawImage(state.logoImgObj, textXOffset, logoY, logoSize, logoSize);
     textXOffset += logoSize + (15 * scale);
@@ -405,19 +400,19 @@ function processAndSavePhoto() {
   const timestamp = new Date().toLocaleString();
   
   ctx.fillStyle = "#FFFFFF";
-  ctx.font = `bold ${18 * scale}px -apple-system, sans-serif`;
+  ctx.font = `bold ${15 * scale}px -apple-system, sans-serif`;
   ctx.fillText(state.surveyTitle, textXOffset, panelY + (28 * scale));
 
   ctx.fillStyle = "#76FF03";
-  ctx.font = `bold ${16 * scale}px -apple-system, sans-serif`;
+  ctx.font = `bold ${14 * scale}px -apple-system, sans-serif`;
   ctx.fillText(`📍 ${state.lat || '0.000000'}, ${state.lng || '0.000000'}`, textXOffset, panelY + (52 * scale));
 
   ctx.fillStyle = "#DDDDDD";
-  ctx.font = `${14 * scale}px -apple-system, sans-serif`;
+  ctx.font = `${12 * scale}px -apple-system, sans-serif`;
   ctx.fillText(`Remarks: ${state.lastRemarks}`, textXOffset, panelY + (74 * scale));
 
   ctx.fillStyle = "#AAAAAA";
-  ctx.font = `${12 * scale}px -apple-system, sans-serif`;
+  ctx.font = `${10 * scale}px -apple-system, sans-serif`;
   ctx.fillText(`Photo captured by: ${state.author} | ${timestamp}`, textXOffset, panelY + (94 * scale));
 
   const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
