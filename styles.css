@@ -60,6 +60,11 @@ body, html {
   object-fit: cover;
 }
 
+/* Selfie/front camera: mirror the preview like a mirror, not a raw feed */
+#video-preview.mirrored {
+  transform: scaleX(-1);
+}
+
 /* Watermark Overlay Elements */
 .brand-pill {
   position: absolute;
