@@ -31,9 +31,9 @@ const state = {
   recordedChunks: [],
   isRecording: false,
   surveyTitle: localStorage.getItem('geo_surveyTitle') || 'PROJECT',
-  author: localStorage.getItem('geo_author') || 'Inspector',
-  defaultRemarks: localStorage.getItem('geo_defaultRemarks') || 'Field observation clear.',
-  lastRemarks: localStorage.getItem('geo_defaultRemarks') || 'Field observation clear.',
+  author: localStorage.getItem('geo_author') || '',
+  defaultRemarks: localStorage.getItem('geo_defaultRemarks') || '',
+  lastRemarks: localStorage.getItem('geo_defaultRemarks') || '',
   logoImgObj: null,
   lat: null,
   lng: null
@@ -123,11 +123,9 @@ async function initCamera() {
   // 2. Build constraints based on facingMode or explicit deviceId
   let videoConstraints = {};
 
-  if (state.currentDeviceId) {
-    videoConstraints = { deviceId: { exact: state.currentDeviceId } };
-  } else {
-    videoConstraints = { facingMode: { ideal: state.facingMode } };
-  }
+videoConstraints = {
+    facingMode: state.facingMode
+};
 
   // Add resolution preferences
   videoConstraints.width = { ideal: 1920 };
@@ -226,31 +224,25 @@ window.addEventListener('DOMContentLoaded', () => {
   });
 
  // Switch Facing Camera Handler
-  safeAddListener('btn-switch-cam', 'click', async () => {
-    // 1. Toggle requested facingMode
-    state.facingMode = state.facingMode === 'environment' ? 'user' : 'environment';
+ safeAddListener('btn-switch-cam', 'click', async () => {
 
-    try {
-      // 2. Query available devices
-      const devices = await navigator.mediaDevices.enumerateDevices();
-      const videoDevices = devices.filter(d => d.kind === 'videoinput');
-
-      if (videoDevices.length > 1) {
-        // Pick the next available camera that isn't the currently active device
-        const nextDevice = videoDevices.find(d => d.deviceId !== state.currentDeviceId);
-        state.currentDeviceId = nextDevice ? nextDevice.deviceId : null;
-      } else {
-        // If deviceId enumeration isn't clear, reset deviceId and rely on facingMode state
-        state.currentDeviceId = null;
-      }
-    } catch (e) {
-      console.warn("Could not enumerate camera devices:", e);
-      state.currentDeviceId = null;
+    // Stop current stream
+    if (state.stream) {
+        state.stream.getTracks().forEach(track => track.stop());
     }
 
-    // 3. Re-initialize stream with new camera
+    // Forget previous device
+    state.currentDeviceId = null;
+
+    // Toggle camera
+    state.facingMode =
+        state.facingMode === "environment"
+            ? "user"
+            : "environment";
+
     await initCamera();
-  });
+
+});
 
   // Navigation Screens
   safeAddListener('btn-settings', 'click', () => switchScreen('settings-screen'));
