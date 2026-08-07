@@ -14,8 +14,8 @@
       <!-- Top Control Bar -->
       <div class="top-bar">
         <button id="btn-torch" class="icon-btn" title="Toggle Torch">
-    <img src="Icons/flashT.png" alt="Torch">
-</button>
+          <img src="Icons/flashT.png" alt="Torch">
+        </button>
         <span class="text-btn" style="font-size:12px; font-weight:bold;">MUNDO GeoCam v1.0</span>
         <button id="btn-settings" class="icon-btn" title="Settings">⚙️</button>
       </div>
@@ -24,6 +24,12 @@
       <div id="viewport-container">
         <video id="video-preview" autoplay playsinline muted></video>
         
+        <!-- Recording Indicator Timer -->
+        <div id="recording-timer" class="rec-pill hidden">
+          <span class="rec-dot"></span>
+          <span id="timer-count">00:00</span>
+        </div>
+
         <!-- Live Watermark Overlay -->
         <div id="overlay-brand" class="brand-pill">MUNDO GeoCam</div>
         
@@ -31,8 +37,8 @@
           <div class="panel-left">
             <!-- Dedicated Logo Panel -->
             <div id="logo-panel" class="logo-panel">
-    <img id="overlay-logo" src="Icons/mundo.png" alt="Office Logo">
-</div>
+              <img id="overlay-logo" src="Icons/mundo.png" alt="Office Logo">
+            </div>
             
             <div class="panel-text">
               <div id="disp-survey-title" class="title-text">PROJECT</div>
@@ -42,32 +48,29 @@
               <div id="disp-datetime" class="meta-text">--/--/----, --:--:--</div>
             </div>
           </div>
-          
         </div>
       </div>
 
       <!-- Bottom Control Bar -->
       <div class="bottom-bar">
         <div class="mode-selector">
-          <span id="mode-video" class="mode-opt active">VIDEO</span>
+          <span id="mode-video" class="mode-opt">VIDEO</span>
           <span id="mode-photo" class="mode-opt active">PHOTO</span>
-          
         </div>
         <div class="shutter-container">
           <button id="btn-library" class="thumb-btn"></button>
           <button id="btn-shutter" class="shutter-btn"></button>
-          
           <button id="btn-switch-cam" class="icon-btn" title="Switch Camera">
-        <img src="Icons/w_switch_camera.png" alt="Switch Camera">
-    </button>
+            <img src="Icons/w_switch_camera.png" alt="Switch Camera">
+          </button>
         </div>
       </div>
     </div>
 
-    <!-- Modal: Shutter Remarks -->
+    <!-- Modal: Shutter & Video Remarks -->
     <div id="modal-remarks" class="modal hidden">
       <div class="modal-content">
-        <h3>Capture Remarks</h3>
+        <h3 id="modal-remarks-title">Capture Remarks</h3>
         <textarea id="input-remarks" placeholder="Enter remarks for this capture..."></textarea>
         <div class="modal-actions">
           <button id="btn-cancel-capture" class="btn-sec">Cancel</button>
@@ -101,7 +104,7 @@
         <label>Survey Title
           <input type="text" id="setting-title" value="PROJECT">
         </label>
-        <label> Captured By
+        <label>Photo Captured By
           <input type="text" id="setting-author" value="Inspector">
         </label>
         <label>Default Remarks Preset

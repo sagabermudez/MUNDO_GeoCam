@@ -60,9 +60,44 @@ body, html {
   object-fit: cover;
 }
 
-/* Selfie/front camera: mirror the preview like a mirror, not a raw feed */
+/* Front camera selfie mirror */
 #video-preview.mirrored {
   transform: scaleX(-1);
+}
+
+/* Recording Overlay Pill */
+.rec-pill {
+  position: absolute;
+  top: 15px;
+  right: 15px;
+  background: rgba(220, 38, 38, 0.85);
+  color: #fff;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-weight: bold;
+  font-size: 14px;
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  z-index: 6;
+}
+
+.rec-pill.hidden {
+  display: none;
+}
+
+.rec-dot {
+  width: 10px;
+  height: 10px;
+  background-color: #ffffff;
+  border-radius: 50%;
+  animation: blink 1s infinite;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.2; }
 }
 
 /* Watermark Overlay Elements */
@@ -95,7 +130,6 @@ body, html {
   transition: all 0.3s ease;
 }
 
-/* Logo Panel Block */
 .logo-panel {
   width: 90px;
   height: 90px;
@@ -116,12 +150,6 @@ body, html {
   object-fit: contain;
 }
 
-.logo-placeholder {
-  font-size: 10px;
-  color: #aaa;
-  text-align: center;
-}
-
 .panel-left {
   display: flex;
   align-items: center;
@@ -139,27 +167,6 @@ body, html {
 .remarks-text { font-size: 12px; color: #ddd; }
 .meta-text { font-size: 10px; color: #aaa; }
 
-.panel-right {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-width: 65px;
-}
-
-.compass-icon {
-  font-size: 20px;
-  transition: transform 0.1s ease-out;
-  color: #fff;
-}
-
-.compass-text {
-  font-size: 10px;
-  font-weight: bold;
-  margin-top: 2px;
-  text-align: center;
-}
-
 /* Bottom Controls */
 .bottom-bar {
   padding: 15px 20px;
@@ -175,8 +182,8 @@ body, html {
   visibility: visible;
   display: flex;
   gap: 20px;
-   justify-content: center;
-    align-items: center;
+  justify-content: center;
+  align-items: center;
 }
 
 .mode-opt {
@@ -205,6 +212,7 @@ body, html {
   border: 4px solid #fff;
   background: transparent;
   position: relative;
+  display: flex;
   align-items: center;
   justify-content: center;
 }
@@ -219,7 +227,8 @@ body, html {
 
 .shutter-btn.recording::after {
   background: #ff3b30;
-  border-radius: 70px;
+  border-radius: 8px;
+  top: 16px; left: 16px; right: 16px; bottom: 16px;
 }
 
 .icon-btn, .text-btn, .thumb-btn {
@@ -240,14 +249,13 @@ body, html {
   justify-content: center;
   overflow: hidden;
   background-size: cover;
+  background-position: center;
 }
-
 
 .icon-btn {
   width: 30px;
   height: 30px;
   border-radius: 6px;
-  border: 0px solid #444;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -256,38 +264,27 @@ body, html {
 }
 
 #btn-switch-cam.icon-btn {
-    width: 50px;      /* Adjust as needed */
-    height: 50px;
-    object-fit: contain;
-    pointer-events: auto;
+  width: 50px;
+  height: 50px;
+  object-fit: contain;
+  pointer-events: auto;
 }
 
 #btn-switch-cam.icon-btn img {
-    width: 80%;      /* Adjust as needed */
-    height: 80%;
-    object-fit: contain;
-    pointer-events: none;
+  width: 80%;
+  height: 80%;
+  object-fit: contain;
+  pointer-events: none;
 }
 
 #btn-torch.icon-btn img, #btn-settings.icon-btn img {
-    width: 100%;      /* Adjust as needed */
-    height: 100%;
-    object-fit: contain;
-    pointer-events: none;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
 }
 
-.btn-torch, .btn-settings {
-  width: 30px;
-  height: 30px;
-  border-radius: 6px;
-  border: 0px solid #444;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  background-size: cover;
-}
-/* Handling Landscape Responsiveness (Moves only overlays/panels smoothly) */
+/* Landscape Responsiveness */
 @media screen and (orientation: landscape) {
   #camera-screen {
     flex-direction: row;
@@ -305,29 +302,24 @@ body, html {
     display: inline-block;
     transform: rotate(-90deg);
     white-space: nowrap;
-}
+  }
 
-.bottom-bar {
+  .bottom-bar {
     width: 128px;
     box-sizing: border-box;
-
     display: grid;
-    grid-template-columns: 28px 1fr; /* Narrow first column */
+    grid-template-columns: 28px 1fr;
     align-items: center;
-    column-gap: 6px;   /* Control the spacing */
-    row-gap: 0;
-
+    column-gap: 6px;
     padding: 10px 8px;
     background: rgba(0,0,0,.85);
-}
+  }
 
   .mode-selector {
-    
     transform: rotate(-90deg);
     gap: 20px;
-     justify-content: center;
+    justify-content: center;
     align-items: center;
-
   }
 
   .shutter-container {
@@ -339,42 +331,33 @@ body, html {
   }
 
   #btn-switch-cam.icon-btn img {
-    width: 80%;      /* Adjust as needed */
+    width: 80%;
     height: 80%;
     object-fit: contain;
     pointer-events: none;
-  
-     transform: rotate(-90deg);
-}
+    transform: rotate(-90deg);
+  }
 
   .bottom-panel {
-    width: 100%; /* Align to the left of shutter control bar */
+    width: 100%;
   }
 
   #btn-torch {
-    position:absolute;
-     transform: rotate(-90deg);
+    position: absolute;
+    transform: rotate(-90deg);
     bottom: 30px;
-    left: 10px;     /* Adjust manually */
-}
+    left: 10px;
+  }
 
-#btn-settings {
-    position:absolute;
+  #btn-settings {
+    position: absolute;
     top: 30px;
-    left: 10px;     /* Adjust manually */
-}
+    left: 10px;
+  }
 
-#btn-library {
-    order: 3;
-}
-
-#btn-shutter {
-    order: 2;
-}
-
-#btn-switch-cam {
-    order: 1;
-}
+  #btn-library { order: 3; }
+  #btn-shutter { order: 2; }
+  #btn-switch-cam { order: 1; }
 }
 
 /* Modals & Screens */
@@ -450,21 +433,22 @@ textarea { height: 80px; resize: none; }
 }
 
 .grid-item {
-  background: #1c1c1e;
+  position: relative;
   border-radius: 8px;
   overflow: hidden;
-  font-size: 10px;
+  background: #1e1e1e;
   display: flex;
   flex-direction: column;
 }
 
-.grid-item img, .grid-item video {
+.grid-item img, 
+.grid-item video {
   width: 100%;
-  height: 100px;
+  height: 180px;
   object-fit: cover;
 }
 
-.grid-info { padding: 6px; }
+.grid-info { padding: 6px; font-size: 10px; }
 
 .settings-form {
   padding: 20px;
@@ -482,24 +466,6 @@ textarea { height: 80px; resize: none; }
   color: #aaa;
 }
 
-/* Media Library Grid Item Styling */
-.grid-item {
-  position: relative;
-  border-radius: 8px;
-  overflow: hidden;
-  background: #1e1e1e;
-  display: flex;
-  flex-direction: column;
-}
-
-.grid-item img, 
-.grid-item video {
-  width: 100%;
-  height: 180px;
-  object-fit: cover;
-}
-
-/* Delete Action Button */
 .btn-delete {
   position: absolute;
   top: 8px;

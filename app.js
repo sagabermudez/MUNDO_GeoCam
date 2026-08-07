@@ -30,6 +30,11 @@ const state = {
   currentDeviceId: null, 
   recordedChunks: [],
   isRecording: false,
+  recordingStartTime: 0,
+  recordingTimerInterval: null,
+  pendingVideoBlob: null,
+  frozenLat: null,
+  frozenLng: null,
   surveyTitle: localStorage.getItem('geo_surveyTitle') || 'PROJECT',
   author: localStorage.getItem('geo_author') || '',
   defaultRemarks: localStorage.getItem('geo_defaultRemarks') || '',
@@ -45,12 +50,25 @@ const viewportEl = document.getElementById('viewport-container');
 const btnShutter = document.getElementById('btn-shutter');
 const modalRemarks = document.getElementById('modal-remarks');
 const inputRemarks = document.getElementById('input-remarks');
+const recTimerEl = document.getElementById('recording-timer');
+const timerCountEl = document.getElementById('timer-count');
 
 let videoAnimationFrame = null;
 
+// Default logo initialization on boot
+function initializeDefaultLogo() {
+  const logoImg = document.getElementById('overlay-logo');
+  if (logoImg) {
+    logoImg.src = 'Icons/mundo.png';
+    logoImg.classList.remove('hidden');
+  }
+  const img = new Image();
+  img.src = 'Icons/mundo.png';
+  img.onload = () => { state.logoImgObj = img; };
+}
+
 // Load Persisted Settings & Logo on Startup
 function loadSavedSettings() {
-  // Update inputs
   const titleInput = document.getElementById('setting-title');
   const authorInput = document.getElementById('setting-author');
   const remarksInput = document.getElementById('setting-default-remarks');
@@ -59,7 +77,6 @@ function loadSavedSettings() {
   if (authorInput) authorInput.value = state.author;
   if (remarksInput) remarksInput.value = state.defaultRemarks;
 
-  // Update overlay displays
   if (document.getElementById('disp-survey-title')) {
     document.getElementById('disp-survey-title').innerText = state.surveyTitle;
   }
@@ -70,11 +87,15 @@ function loadSavedSettings() {
     document.getElementById('disp-remarks').innerText = `Remarks: ${state.defaultRemarks}`;
   }
 
-  // Load Logo from IndexedDB
-  if (!db) return;
+  // Load Logo from IndexedDB or set default fallback (Icons/mundo.png)
+  if (!db) {
+    initializeDefaultLogo();
+    return;
+  }
+  
   const tx = db.transaction("settings", "readonly");
   const req = tx.objectStore("settings").get("office_logo");
-  req.onsuccess = (e) => {
+  req.onsuccess = () => {
     if (req.result && req.result.value) {
       const dataUrl = req.result.value;
       const logoImg = document.getElementById('overlay-logo');
@@ -82,13 +103,14 @@ function loadSavedSettings() {
         logoImg.src = dataUrl;
         logoImg.classList.remove('hidden');
       }
-      document.getElementById('logo-placeholder')?.classList.add('hidden');
-
       const img = new Image();
       img.src = dataUrl;
       img.onload = () => { state.logoImgObj = img; };
+    } else {
+      initializeDefaultLogo();
     }
   };
+  req.onerror = () => initializeDefaultLogo();
 }
 
 // Geolocation Handler
@@ -97,8 +119,12 @@ if ("geolocation" in navigator) {
     (pos) => {
       state.lat = pos.coords.latitude.toFixed(6);
       state.lng = pos.coords.longitude.toFixed(6);
-      const coordsEl = document.getElementById('disp-coords');
-      if (coordsEl) coordsEl.innerText = `📍 ${state.lat}, ${state.lng}`;
+      
+      // Update UI only if not frozen by capture modal
+      if (state.frozenLat === null && state.frozenLng === null) {
+        const coordsEl = document.getElementById('disp-coords');
+        if (coordsEl) coordsEl.innerText = `📍 ${state.lat}, ${state.lng}`;
+      }
     },
     (err) => console.error(err),
     { enableHighAccuracy: true, maximumAge: 1000, timeout: 5000 }
@@ -112,54 +138,50 @@ setInterval(() => {
   if (dateEl) dateEl.innerText = now;
 }, 1000);
 
-// Initialize Camera Stream
+// Initialize Camera Stream with High Quality Audio Constraints
 async function initCamera() {
-  // 1. Fully release active stream tracks
   if (state.stream) {
     state.stream.getTracks().forEach(track => track.stop());
     videoEl.srcObject = null;
   }
 
-  // Small release delay: some browsers (notably iOS Safari) need a beat
-  // after stopping old tracks before a new camera will be handed off.
   await new Promise(resolve => setTimeout(resolve, 150));
 
-  // 2. Build constraints based on facingMode or explicit deviceId
-  // Use `exact` on the primary attempt so switching cameras is actually
-  // enforced rather than treated as a soft preference the browser can
-  // override in favor of other constraints (like resolution).
   let videoConstraints = {
     facingMode: { exact: state.facingMode },
     width: { ideal: 1920 },
     height: { ideal: 1080 }
   };
 
+  // High Quality Audio Constraints
+  let audioConstraints = state.mode === 'VIDEO' ? {
+    echoCancellation: true,
+    noiseSuppression: true,
+    autoGainControl: true,
+    sampleRate: 48000,
+    channelCount: 2
+  } : false;
+
   try {
     state.stream = await navigator.mediaDevices.getUserMedia({
       video: videoConstraints,
-      audio: state.mode === 'VIDEO'
+      audio: audioConstraints
     });
 
     videoEl.srcObject = state.stream;
     await videoEl.play();
     videoEl.classList.toggle('mirrored', state.facingMode === 'user');
     
-    const track = state.stream.getVideoTracks()[0];
-console.log("Current Camera Settings:", track.getSettings());
-
-    // Store active deviceId
     const currentTrack = state.stream.getVideoTracks()[0];
     if (currentTrack && currentTrack.getSettings) {
       state.currentDeviceId = currentTrack.getSettings().deviceId;
     }
   } catch (err) {
-    console.warn("Exact facingMode failed (device may lack that camera), falling back to ideal:", err);
+    console.warn("Exact facingMode failed, attempting fallback:", err);
     try {
-      // Loose fallback: only reached if there's genuinely no camera
-      // matching the requested facing mode (e.g. single-camera device).
       state.stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: state.facingMode },
-        audio: state.mode === 'VIDEO'
+        audio: audioConstraints
       });
       videoEl.srcObject = state.stream;
       await videoEl.play();
@@ -203,6 +225,7 @@ window.addEventListener('DOMContentLoaded', () => {
   safeAddListener('mode-video', 'click', (e) => setMode('VIDEO', e.target));
 
   function setMode(mode, target) {
+    if (state.isRecording) return; // Prevent switching while actively recording
     state.mode = mode;
     document.querySelectorAll('.mode-opt').forEach(el => el.classList.remove('active'));
     target.classList.add('active');
@@ -212,8 +235,11 @@ window.addEventListener('DOMContentLoaded', () => {
   // Shutter Press
   safeAddListener('btn-shutter', 'click', () => {
     if (state.mode === 'PHOTO') {
+      // Freeze coordinates on photo capture prompt
+      freezeCoordinates();
       videoEl.pause();
       inputRemarks.value = state.lastRemarks;
+      document.getElementById('modal-remarks-title').innerText = 'Photo Capture Remarks';
       modalRemarks.classList.remove('hidden');
     } else {
       toggleVideoRecording();
@@ -223,6 +249,8 @@ window.addEventListener('DOMContentLoaded', () => {
   // Modal Cancel
   safeAddListener('btn-cancel-capture', 'click', () => {
     modalRemarks.classList.add('hidden');
+    unfreezeCoordinates();
+    state.pendingVideoBlob = null;
     videoEl.play();
   });
 
@@ -233,43 +261,32 @@ window.addEventListener('DOMContentLoaded', () => {
     const remarksEl = document.getElementById('disp-remarks');
     if (remarksEl) remarksEl.innerText = `Remarks: ${state.lastRemarks}`;
     
-    processAndSavePhoto();
+    if (state.pendingVideoBlob) {
+      processAndSaveVideo(state.pendingVideoBlob);
+      state.pendingVideoBlob = null;
+    } else {
+      processAndSavePhoto();
+    }
+    
+    unfreezeCoordinates();
     videoEl.play();
   });
 
- // Switch Facing Camera Handler
-safeAddListener("btn-switch-cam", "click", async () => {
+  // Switch Facing Camera Handler
+  safeAddListener("btn-switch-cam", "click", async () => {
+    if (state.isRecording) return;
+    state.facingMode = state.facingMode === "environment" ? "user" : "environment";
 
-    console.log("BUTTON CLICKED");
-
-    console.log("Current facing:", state.facingMode);
-
-    state.facingMode =
-        state.facingMode === "environment"
-        ? "user"
-        : "environment";
-
-    console.log("New facing:", state.facingMode);
-
-    try{
-
-        if(state.stream){
-            state.stream.getTracks().forEach(t=>t.stop());
-        }
-
-        state.currentDeviceId = null;
-
-        await initCamera();
-
-        console.log("Camera restarted.");
-
-    }catch(err){
-
-        console.error(err);
-
+    try {
+      if (state.stream) {
+        state.stream.getTracks().forEach(t => t.stop());
+      }
+      state.currentDeviceId = null;
+      await initCamera();
+    } catch(err) {
+      console.error(err);
     }
-
-});
+  });
 
   // Navigation Screens
   safeAddListener('btn-settings', 'click', () => switchScreen('settings-screen'));
@@ -320,13 +337,11 @@ safeAddListener("btn-switch-cam", "click", async () => {
           logoImg.src = dataUrl;
           logoImg.classList.remove('hidden');
         }
-        document.getElementById('logo-placeholder')?.classList.add('hidden');
 
         const img = new Image();
         img.src = dataUrl;
         img.onload = () => { state.logoImgObj = img; };
 
-        // Store Logo Data in IndexedDB
         if (db) {
           const tx = db.transaction("settings", "readwrite");
           tx.objectStore("settings").put({ key: "office_logo", value: dataUrl });
@@ -338,10 +353,24 @@ safeAddListener("btn-switch-cam", "click", async () => {
     switchScreen('camera-screen');
   });
 
-  // Data Export Buttons
   safeAddListener('btn-export-csv', 'click', exportCSV);
   safeAddListener('btn-export-geojson', 'click', exportGeoJSON);
 });
+
+// Coordinate Freeze Functions
+function freezeCoordinates() {
+  state.frozenLat = state.lat || '0.000000';
+  state.frozenLng = state.lng || '0.000000';
+  const coordsEl = document.getElementById('disp-coords');
+  if (coordsEl) coordsEl.innerText = `📍 ${state.frozenLat}, ${state.frozenLng}`;
+}
+
+function unfreezeCoordinates() {
+  state.frozenLat = null;
+  state.frozenLng = null;
+  const coordsEl = document.getElementById('disp-coords');
+  if (coordsEl) coordsEl.innerText = `📍 ${state.lat || 'Waiting for GPS...'}, ${state.lng || ''}`;
+}
 
 function switchScreen(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
@@ -384,7 +413,6 @@ function processAndSavePhoto() {
   }
 
   if (state.facingMode === 'user') {
-    // Mirror only the camera image, matching the mirrored preview.
     ctx.save();
     ctx.translate(canvas.width, 0);
     ctx.scale(-1, 1);
@@ -419,13 +447,25 @@ function processAndSavePhoto() {
   let textXOffset = 20 * scale;
 
   if (state.logoImgObj) {
-    const logoSize = 70 * scale;
+    const logoSize = 80 * scale;
     const logoY = panelY + ((panelHeight - logoSize) / 2);
+    const borderRadius = 10 * scale; // Adjust radius as needed
+
+    ctx.save(); // Save canvas context state
+    ctx.beginPath();
+    ctx.roundRect(textXOffset, logoY, logoSize, logoSize, borderRadius);
+    ctx.clip(); // Clip canvas to the rounded rectangle shape
+    
     ctx.drawImage(state.logoImgObj, textXOffset, logoY, logoSize, logoSize);
+    
+    ctx.restore(); // Restore canvas context state so future drawing isn't clipped
+    
     textXOffset += logoSize + (15 * scale);
   }
 
   const timestamp = new Date().toLocaleString();
+  const activeLat = state.frozenLat !== null ? state.frozenLat : (state.lat || '0.000000');
+  const activeLng = state.frozenLng !== null ? state.frozenLng : (state.lng || '0.000000');
   
   ctx.fillStyle = "#FFFFFF";
   ctx.font = `bold ${15 * scale}px -apple-system, sans-serif`;
@@ -433,7 +473,7 @@ function processAndSavePhoto() {
 
   ctx.fillStyle = "#76FF03";
   ctx.font = `bold ${14 * scale}px -apple-system, sans-serif`;
-  ctx.fillText(`📍 ${state.lat || '0.000000'}, ${state.lng || '0.000000'}`, textXOffset, panelY + (52 * scale));
+  ctx.fillText(`📍 ${activeLat}, ${activeLng}`, textXOffset, panelY + (52 * scale));
 
   ctx.fillStyle = "#DDDDDD";
   ctx.font = `${12 * scale}px -apple-system, sans-serif`;
@@ -448,8 +488,8 @@ function processAndSavePhoto() {
     type: 'image',
     blobUrl: dataUrl,
     title: state.surveyTitle,
-    lat: state.lat,
-    lng: state.lng,
+    lat: activeLat,
+    lng: activeLng,
     remarks: state.lastRemarks,
     author: state.author,
     timestamp: timestamp
@@ -459,7 +499,7 @@ function processAndSavePhoto() {
   downloadFile(dataUrl, `MUNDO_${Date.now()}.jpg`);
 }
 
-// Video Canvas Frame Renderer
+// Video Canvas Frame Renderer matching viewport exactly
 function drawVideoFrameToCanvas(canvas, ctx) {
   const viewport = viewportEl || document.getElementById('viewport-container');
   const viewportRect = viewport.getBoundingClientRect();
@@ -492,7 +532,6 @@ function drawVideoFrameToCanvas(canvas, ctx) {
   }
 
   if (state.facingMode === 'user') {
-    // Mirror only the camera image, matching the mirrored preview.
     ctx.save();
     ctx.translate(canvas.width, 0);
     ctx.scale(-1, 1);
@@ -524,14 +563,26 @@ function drawVideoFrameToCanvas(canvas, ctx) {
 
   let textXOffset = 20 * scale;
 
-  if (state.logoImgObj) {
-    const logoSize = 65 * scale;
+ if (state.logoImgObj) {
+    const logoSize = 80 * scale;
     const logoY = panelY + ((panelHeight - logoSize) / 2);
+    const borderRadius = 10 * scale;
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.roundRect(textXOffset, logoY, logoSize, logoSize, borderRadius);
+    ctx.clip();
+
     ctx.drawImage(state.logoImgObj, textXOffset, logoY, logoSize, logoSize);
+
+    ctx.restore();
+
     textXOffset += logoSize + (15 * scale);
   }
 
   const timestamp = new Date().toLocaleString();
+  const activeLat = state.frozenLat !== null ? state.frozenLat : (state.lat || '0.000000');
+  const activeLng = state.frozenLng !== null ? state.frozenLng : (state.lng || '0.000000');
 
   ctx.fillStyle = "#FFFFFF";
   ctx.font = `bold ${18 * scale}px -apple-system, sans-serif`;
@@ -539,7 +590,7 @@ function drawVideoFrameToCanvas(canvas, ctx) {
 
   ctx.fillStyle = "#76FF03";
   ctx.font = `bold ${16 * scale}px -apple-system, sans-serif`;
-  ctx.fillText(`📍 ${state.lat || '0.000000'}, ${state.lng || '0.000000'}`, textXOffset, panelY + (52 * scale));
+  ctx.fillText(`📍 ${activeLat}, ${activeLng}`, textXOffset, panelY + (52 * scale));
 
   ctx.fillStyle = "#DDDDDD";
   ctx.font = `${14 * scale}px -apple-system, sans-serif`;
@@ -552,6 +603,26 @@ function drawVideoFrameToCanvas(canvas, ctx) {
   if (state.isRecording) {
     videoAnimationFrame = requestAnimationFrame(() => drawVideoFrameToCanvas(canvas, ctx));
   }
+}
+
+// Timer Functions
+function startRecordingTimer() {
+  state.recordingStartTime = Date.now();
+  recTimerEl.classList.remove('hidden');
+  timerCountEl.innerText = '00:00';
+  
+  state.recordingTimerInterval = setInterval(() => {
+    const elapsedSecs = Math.floor((Date.now() - state.recordingStartTime) / 1000);
+    const mins = String(Math.floor(elapsedSecs / 60)).padStart(2, '0');
+    const secs = String(elapsedSecs % 60).padStart(2, '0');
+    timerCountEl.innerText = `${mins}:${secs}`;
+  }, 1000);
+}
+
+function stopRecordingTimer() {
+  clearInterval(state.recordingTimerInterval);
+  recTimerEl.classList.add('hidden');
+  timerCountEl.innerText = '00:00';
 }
 
 // Video Recording Operations
@@ -579,31 +650,47 @@ function toggleVideoRecording() {
     state.mediaRecorder.ondataavailable = (e) => {
       if (e.data.size > 0) state.recordedChunks.push(e.data);
     };
-    state.mediaRecorder.onstop = saveVideo;
+    state.mediaRecorder.onstop = handleVideoStop;
     state.mediaRecorder.start();
 
+    startRecordingTimer();
     btnShutter.classList.add('recording');
   } else {
     state.isRecording = false;
+    stopRecordingTimer();
+    freezeCoordinates();
+    
     if (videoAnimationFrame) cancelAnimationFrame(videoAnimationFrame);
     state.mediaRecorder.stop();
     btnShutter.classList.remove('recording');
   }
 }
 
-function saveVideo() {
+function handleVideoStop() {
   const mimeType = state.mediaRecorder.mimeType || 'video/webm';
-  const ext = mimeType.includes('mp4') ? 'mp4' : 'webm';
   const blob = new Blob(state.recordedChunks, { type: mimeType });
+  state.pendingVideoBlob = blob;
+
+  // Open modal to request remarks post-recording
+  inputRemarks.value = state.lastRemarks;
+  document.getElementById('modal-remarks-title').innerText = 'Video Recording Remarks';
+  modalRemarks.classList.remove('hidden');
+}
+
+function processAndSaveVideo(blob) {
+  const mimeType = blob.type || 'video/webm';
+  const ext = mimeType.includes('mp4') ? 'mp4' : 'webm';
   const videoUrl = URL.createObjectURL(blob);
   const timestamp = new Date().toLocaleString();
+  const activeLat = state.frozenLat !== null ? state.frozenLat : (state.lat || '0.000000');
+  const activeLng = state.frozenLng !== null ? state.frozenLng : (state.lng || '0.000000');
 
   const record = {
     type: 'video',
     blobUrl: videoUrl,
     title: state.surveyTitle,
-    lat: state.lat,
-    lng: state.lng,
+    lat: activeLat,
+    lng: activeLng,
     remarks: state.lastRemarks || state.defaultRemarks,
     author: state.author,
     timestamp: timestamp
