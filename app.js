@@ -38,7 +38,6 @@ const state = {
   surveyTitle: localStorage.getItem('geo_surveyTitle') || 'PROJECT',
   author: localStorage.getItem('geo_author') || '',
   defaultRemarks: localStorage.getItem('geo_defaultRemarks') || '',
-  lastRemarks: localStorage.getItem('geo_defaultRemarks') || '',
   logoImgObj: null,
   lat: null,
   lng: null,
@@ -82,8 +81,11 @@ function loadSavedSettings() {
   if (document.getElementById('disp-author')) {
     document.getElementById('disp-author').innerText = `Photo captured by: ${state.author}`;
   }
-  if (document.getElementById('disp-remarks')) {
-    document.getElementById('disp-remarks').innerText = `Remarks: ${state.defaultRemarks}`;
+  
+  // Show default remarks in live overlay bottom panel only if set in settings
+  const dispRemarksEl = document.getElementById('disp-remarks');
+  if (dispRemarksEl) {
+    dispRemarksEl.innerText = state.defaultRemarks ? `Remarks: ${state.defaultRemarks}` : 'Remarks: ';
   }
 
   if (!db) {
@@ -225,7 +227,8 @@ window.addEventListener('DOMContentLoaded', () => {
     if (state.mode === 'PHOTO') {
       freezeCoordinates();
       videoEl.pause();
-      inputRemarks.value = state.lastRemarks;
+      // Pre-fill prompt with default remarks preset without binding it as new default
+      inputRemarks.value = state.defaultRemarks;
       document.getElementById('modal-remarks-title').innerText = 'Photo Capture Remarks';
       modalRemarks.classList.remove('hidden');
     } else {
@@ -242,15 +245,13 @@ window.addEventListener('DOMContentLoaded', () => {
 
   safeAddListener('btn-confirm-capture', 'click', () => {
     modalRemarks.classList.add('hidden');
-    state.lastRemarks = inputRemarks.value;
-    const remarksEl = document.getElementById('disp-remarks');
-    if (remarksEl) remarksEl.innerText = `Remarks: ${state.lastRemarks}`;
+    const capturedRemarks = inputRemarks.value;
     
     if (state.pendingVideoBlob) {
-      processAndSaveVideo(state.pendingVideoBlob);
+      processAndSaveVideo(state.pendingVideoBlob, capturedRemarks);
       state.pendingVideoBlob = null;
     } else {
-      processAndSavePhoto();
+      processAndSavePhoto(capturedRemarks);
     }
     
     unfreezeCoordinates();
@@ -280,7 +281,6 @@ window.addEventListener('DOMContentLoaded', () => {
   });
   safeAddListener('btn-close-lib', 'click', () => switchScreen('camera-screen'));
 
-  // Map & Viewer Event Listeners
   safeAddListener('btn-view-map', 'click', openMapView);
   safeAddListener('btn-close-map', 'click', () => document.getElementById('modal-map').classList.add('hidden'));
   safeAddListener('btn-close-viewer', 'click', () => document.getElementById('modal-viewer').classList.add('hidden'));
@@ -302,7 +302,6 @@ window.addEventListener('DOMContentLoaded', () => {
       state.defaultRemarks = remarksInput.value;
       localStorage.setItem('geo_defaultRemarks', state.defaultRemarks);
     }
-    state.lastRemarks = state.defaultRemarks;
 
     if (document.getElementById('disp-survey-title')) {
       document.getElementById('disp-survey-title').innerText = state.surveyTitle;
@@ -310,8 +309,10 @@ window.addEventListener('DOMContentLoaded', () => {
     if (document.getElementById('disp-author')) {
       document.getElementById('disp-author').innerText = `Photo captured by: ${state.author}`;
     }
-    if (document.getElementById('disp-remarks')) {
-      document.getElementById('disp-remarks').innerText = `Remarks: ${state.defaultRemarks}`;
+    
+    const dispRemarksEl = document.getElementById('disp-remarks');
+    if (dispRemarksEl) {
+      dispRemarksEl.innerText = state.defaultRemarks ? `Remarks: ${state.defaultRemarks}` : 'Remarks: ';
     }
 
     const logoFile = document.getElementById('setting-logo-file')?.files[0];
@@ -363,7 +364,7 @@ function switchScreen(id) {
   document.getElementById(id).classList.add('active');
 }
 
-function processAndSavePhoto() {
+function processAndSavePhoto(capturedRemarks) {
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d');
 
@@ -456,9 +457,10 @@ function processAndSavePhoto() {
   ctx.font = `bold ${14 * scale}px -apple-system, sans-serif`;
   ctx.fillText(`📍 ${activeLat}, ${activeLng}`, textXOffset, panelY + (52 * scale));
 
+  // Burn captured photo remarks onto the image
   ctx.fillStyle = "#DDDDDD";
   ctx.font = `${12 * scale}px -apple-system, sans-serif`;
-  ctx.fillText(`Remarks: ${state.lastRemarks}`, textXOffset, panelY + (74 * scale));
+  ctx.fillText(`Remarks: ${capturedRemarks || ''}`, textXOffset, panelY + (74 * scale));
 
   ctx.fillStyle = "#AAAAAA";
   ctx.font = `${10 * scale}px -apple-system, sans-serif`;
@@ -471,7 +473,7 @@ function processAndSavePhoto() {
     title: state.surveyTitle,
     lat: activeLat,
     lng: activeLng,
-    remarks: state.lastRemarks,
+    remarks: capturedRemarks || '',
     author: state.author,
     timestamp: timestamp
   };
@@ -543,7 +545,7 @@ function drawVideoFrameToCanvas(canvas, ctx) {
 
   let textXOffset = 20 * scale;
 
- if (state.logoImgObj) {
+  if (state.logoImgObj) {
     const logoSize = 80 * scale;
     const logoY = panelY + ((panelHeight - logoSize) / 2);
     const borderRadius = 10 * scale;
@@ -572,7 +574,7 @@ function drawVideoFrameToCanvas(canvas, ctx) {
 
   ctx.fillStyle = "#DDDDDD";
   ctx.font = `${14 * scale}px -apple-system, sans-serif`;
-  ctx.fillText(`Remarks: ${state.lastRemarks || state.defaultRemarks}`, textXOffset, panelY + (74 * scale));
+  ctx.fillText(`Remarks: ${state.defaultRemarks || ''}`, textXOffset, panelY + (74 * scale));
 
   ctx.fillStyle = "#AAAAAA";
   ctx.font = `${12 * scale}px -apple-system, sans-serif`;
@@ -658,12 +660,12 @@ function handleVideoStop() {
   const blob = new Blob(state.recordedChunks, { type: mimeType });
   state.pendingVideoBlob = blob;
 
-  inputRemarks.value = state.lastRemarks;
+  inputRemarks.value = state.defaultRemarks;
   document.getElementById('modal-remarks-title').innerText = 'Video Recording Remarks';
   modalRemarks.classList.remove('hidden');
 }
 
-function processAndSaveVideo(blob) {
+function processAndSaveVideo(blob, capturedRemarks) {
   const mimeType = blob.type || 'video/webm';
   const ext = mimeType.includes('mp4') ? 'mp4' : 'webm';
   const videoUrl = URL.createObjectURL(blob);
@@ -677,7 +679,7 @@ function processAndSaveVideo(blob) {
     title: state.surveyTitle,
     lat: activeLat,
     lng: activeLng,
-    remarks: state.lastRemarks || state.defaultRemarks,
+    remarks: capturedRemarks || '',
     author: state.author,
     timestamp: timestamp
   };
@@ -739,7 +741,6 @@ function renderLibrary() {
         </div>
       `;
 
-      // Open Viewer on Click
       el.addEventListener('click', (ev) => {
         if (!ev.target.classList.contains('btn-delete')) {
           openMediaViewer(item);
@@ -759,7 +760,6 @@ function renderLibrary() {
   };
 }
 
-// Lightbox Viewer Implementation
 function openMediaViewer(item) {
   const modal = document.getElementById('modal-viewer');
   const mediaContainer = document.getElementById('viewer-media-container');
@@ -782,7 +782,7 @@ function openMediaViewer(item) {
   modal.classList.remove('hidden');
 }
 
-// Leaflet Google Satellite Map View
+// Leaflet Map with Circle Markers rendered above map tiles
 function openMapView() {
   const modal = document.getElementById('modal-map');
   modal.classList.remove('hidden');
@@ -791,7 +791,6 @@ function openMapView() {
     if (!state.mapInstance) {
       state.mapInstance = L.map('map-container').setView([8.9, 117.5], 10);
 
-      // Google Satellite basemap layer
       L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
         maxZoom: 20,
         attribution: '&copy; Google Maps'
@@ -800,9 +799,9 @@ function openMapView() {
 
     state.mapInstance.invalidateSize();
 
-    // Clear existing markers
+    // Clear existing layer markers
     state.mapInstance.eachLayer((layer) => {
-      if (layer instanceof L.Marker) {
+      if (layer instanceof L.CircleMarker || layer instanceof L.Marker) {
         state.mapInstance.removeLayer(layer);
       }
     });
@@ -818,7 +817,16 @@ function openMapView() {
         const lng = parseFloat(item.lng);
 
         if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
-          const marker = L.marker([lat, lng]).addTo(state.mapInstance);
+          // Render circle marker above satellite tiles
+          const circleMarker = L.circleMarker([lat, lng], {
+            radius: 8,
+            fillColor: '#FF3366',
+            color: '#FFFFFF',
+            weight: 2,
+            opacity: 1,
+            fillOpacity: 0.9,
+            pane: 'markerPane'
+          }).addTo(state.mapInstance);
           
           const popupHtml = `
             <div style="color:#000; font-size:12px;">
@@ -828,7 +836,7 @@ function openMapView() {
               <em>${item.remarks || ''}</em>
             </div>
           `;
-          marker.bindPopup(popupHtml);
+          circleMarker.bindPopup(popupHtml);
           bounds.push([lat, lng]);
         }
         cursor.continue();
