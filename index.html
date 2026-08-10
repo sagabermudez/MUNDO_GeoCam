@@ -5,13 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
   <title>MUNDO GeoCam</title>
   <link rel="manifest" href="manifest.json">
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <div id="app">
     <!-- Camera View Screen -->
     <div id="camera-screen" class="screen active">
-      <!-- Top Control Bar -->
       <div class="top-bar">
         <button id="btn-torch" class="icon-btn" title="Toggle Torch">
           <img src="Icons/flashT.png" alt="Torch">
@@ -20,22 +21,18 @@
         <button id="btn-settings" class="icon-btn" title="Settings">⚙️</button>
       </div>
 
-      <!-- Main Camera Viewport -->
       <div id="viewport-container">
         <video id="video-preview" autoplay playsinline muted></video>
         
-        <!-- Recording Indicator Timer -->
         <div id="recording-timer" class="rec-pill hidden">
           <span class="rec-dot"></span>
           <span id="timer-count">00:00</span>
         </div>
 
-        <!-- Live Watermark Overlay -->
         <div id="overlay-brand" class="brand-pill">MUNDO GeoCam</div>
         
         <div id="overlay-bottom-panel" class="bottom-panel">
           <div class="panel-left">
-            <!-- Dedicated Logo Panel -->
             <div id="logo-panel" class="logo-panel">
               <img id="overlay-logo" src="Icons/mundo.png" alt="Office Logo">
             </div>
@@ -51,7 +48,6 @@
         </div>
       </div>
 
-      <!-- Bottom Control Bar -->
       <div class="bottom-bar">
         <div class="mode-selector">
           <span id="mode-video" class="mode-opt">VIDEO</span>
@@ -82,21 +78,42 @@
     <!-- Library Screen -->
     <div id="library-screen" class="screen">
       <div class="screen-header">
-        <button id="btn-close-lib" class="icon-btn">⬅️</button>
+        <button id="btn-close-lib" class="icon-btn">&lt;</button>
         <h2>Media Library</h2>
         <div></div>
       </div>
       <div class="export-bar">
+        <button id="btn-view-map" class="btn-pri">View in Map</button>
         <button id="btn-export-csv" class="btn-sec">Export CSV</button>
         <button id="btn-export-geojson" class="btn-sec">Export GeoJSON</button>
       </div>
       <div id="library-grid" class="grid-container"></div>
     </div>
 
+    <!-- Map View Modal -->
+    <div id="modal-map" class="modal hidden">
+      <div class="modal-content map-modal-content">
+        <div class="modal-header">
+          <h3>Photo Locations Map</h3>
+          <button id="btn-close-map" class="btn-sec">Close</button>
+        </div>
+        <div id="map-container"></div>
+      </div>
+    </div>
+
+    <!-- Fullscreen Media Lightbox Viewer Modal -->
+    <div id="modal-viewer" class="modal hidden">
+      <div class="viewer-content">
+        <button id="btn-close-viewer" class="btn-close-lightbox">✕</button>
+        <div id="viewer-media-container"></div>
+        <div id="viewer-details" class="viewer-details"></div>
+      </div>
+    </div>
+
     <!-- Settings Screen -->
     <div id="settings-screen" class="screen">
       <div class="screen-header">
-        <button id="btn-close-settings" class="icon-btn">⬅️</button>
+        <button id="btn-close-settings" class="icon-btn">&lt;</button>
         <h2>Settings</h2>
         <div></div>
       </div>
@@ -115,10 +132,16 @@
         </label>
 
         <button id="btn-save-settings" class="btn-pri">Save Settings</button>
+      
+        <footer class="settings-credit">
+          PWA developed by Alexis S. Bermudez
+        </footer>
       </div>
     </div>
   </div>
 
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

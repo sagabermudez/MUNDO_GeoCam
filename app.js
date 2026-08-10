@@ -23,7 +23,7 @@ if ('serviceWorker' in navigator) {
 
 // State Management
 const state = {
-  mode: 'PHOTO', // 'PHOTO' or 'VIDEO'
+  mode: 'PHOTO',
   facingMode: 'environment',
   torchOn: false,
   stream: null,
@@ -41,7 +41,8 @@ const state = {
   lastRemarks: localStorage.getItem('geo_defaultRemarks') || '',
   logoImgObj: null,
   lat: null,
-  lng: null
+  lng: null,
+  mapInstance: null
 };
 
 // UI Elements
@@ -55,7 +56,6 @@ const timerCountEl = document.getElementById('timer-count');
 
 let videoAnimationFrame = null;
 
-// Default logo initialization on boot
 function initializeDefaultLogo() {
   const logoImg = document.getElementById('overlay-logo');
   if (logoImg) {
@@ -67,7 +67,6 @@ function initializeDefaultLogo() {
   img.onload = () => { state.logoImgObj = img; };
 }
 
-// Load Persisted Settings & Logo on Startup
 function loadSavedSettings() {
   const titleInput = document.getElementById('setting-title');
   const authorInput = document.getElementById('setting-author');
@@ -87,7 +86,6 @@ function loadSavedSettings() {
     document.getElementById('disp-remarks').innerText = `Remarks: ${state.defaultRemarks}`;
   }
 
-  // Load Logo from IndexedDB or set default fallback (Icons/mundo.png)
   if (!db) {
     initializeDefaultLogo();
     return;
@@ -113,14 +111,12 @@ function loadSavedSettings() {
   req.onerror = () => initializeDefaultLogo();
 }
 
-// Geolocation Handler
 if ("geolocation" in navigator) {
   navigator.geolocation.watchPosition(
     (pos) => {
       state.lat = pos.coords.latitude.toFixed(6);
       state.lng = pos.coords.longitude.toFixed(6);
       
-      // Update UI only if not frozen by capture modal
       if (state.frozenLat === null && state.frozenLng === null) {
         const coordsEl = document.getElementById('disp-coords');
         if (coordsEl) coordsEl.innerText = `📍 ${state.lat}, ${state.lng}`;
@@ -131,14 +127,12 @@ if ("geolocation" in navigator) {
   );
 }
 
-// System Clock
 setInterval(() => {
   const now = new Date().toLocaleString();
   const dateEl = document.getElementById('disp-datetime');
   if (dateEl) dateEl.innerText = now;
 }, 1000);
 
-// Initialize Camera Stream with High Quality Audio Constraints
 async function initCamera() {
   if (state.stream) {
     state.stream.getTracks().forEach(track => track.stop());
@@ -153,13 +147,13 @@ async function initCamera() {
     height: { ideal: 1080 }
   };
 
-  // High Quality Audio Constraints
   let audioConstraints = state.mode === 'VIDEO' ? {
-    echoCancellation: true,
-    noiseSuppression: true,
-    autoGainControl: true,
-    sampleRate: 48000,
-    channelCount: 2
+    echoCancellation: false,
+    noiseSuppression: false,
+    autoGainControl: false,
+    channelCount: { ideal: 2 },
+    sampleRate: { ideal: 48000 },
+    sampleSize: { ideal: 16 }
   } : false;
 
   try {
@@ -177,7 +171,6 @@ async function initCamera() {
       state.currentDeviceId = currentTrack.getSettings().deviceId;
     }
   } catch (err) {
-    console.warn("Exact facingMode failed, attempting fallback:", err);
     try {
       state.stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: state.facingMode },
@@ -197,17 +190,14 @@ async function initCamera() {
   }
 }
 
-// Safe Event Listener Helper
 const safeAddListener = (id, event, handler) => {
   const el = document.getElementById(id);
   if (el) el.addEventListener(event, handler);
 };
 
-// Setup Event Listeners
 window.addEventListener('DOMContentLoaded', () => {
   initCamera();
 
-  // Torch Toggle
   safeAddListener('btn-torch', 'click', async () => {
     if (!state.stream) return;
     const track = state.stream.getVideoTracks()[0];
@@ -220,22 +210,19 @@ window.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // Switch Mode
   safeAddListener('mode-photo', 'click', (e) => setMode('PHOTO', e.target));
   safeAddListener('mode-video', 'click', (e) => setMode('VIDEO', e.target));
 
   function setMode(mode, target) {
-    if (state.isRecording) return; // Prevent switching while actively recording
+    if (state.isRecording) return;
     state.mode = mode;
     document.querySelectorAll('.mode-opt').forEach(el => el.classList.remove('active'));
     target.classList.add('active');
     initCamera();
   }
 
-  // Shutter Press
   safeAddListener('btn-shutter', 'click', () => {
     if (state.mode === 'PHOTO') {
-      // Freeze coordinates on photo capture prompt
       freezeCoordinates();
       videoEl.pause();
       inputRemarks.value = state.lastRemarks;
@@ -246,7 +233,6 @@ window.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // Modal Cancel
   safeAddListener('btn-cancel-capture', 'click', () => {
     modalRemarks.classList.add('hidden');
     unfreezeCoordinates();
@@ -254,7 +240,6 @@ window.addEventListener('DOMContentLoaded', () => {
     videoEl.play();
   });
 
-  // Modal Save
   safeAddListener('btn-confirm-capture', 'click', () => {
     modalRemarks.classList.add('hidden');
     state.lastRemarks = inputRemarks.value;
@@ -272,7 +257,6 @@ window.addEventListener('DOMContentLoaded', () => {
     videoEl.play();
   });
 
-  // Switch Facing Camera Handler
   safeAddListener("btn-switch-cam", "click", async () => {
     if (state.isRecording) return;
     state.facingMode = state.facingMode === "environment" ? "user" : "environment";
@@ -288,7 +272,6 @@ window.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // Navigation Screens
   safeAddListener('btn-settings', 'click', () => switchScreen('settings-screen'));
   safeAddListener('btn-close-settings', 'click', () => switchScreen('camera-screen'));
   safeAddListener('btn-library', 'click', () => {
@@ -297,7 +280,11 @@ window.addEventListener('DOMContentLoaded', () => {
   });
   safeAddListener('btn-close-lib', 'click', () => switchScreen('camera-screen'));
 
-  // Save Settings & Logo persistently
+  // Map & Viewer Event Listeners
+  safeAddListener('btn-view-map', 'click', openMapView);
+  safeAddListener('btn-close-map', 'click', () => document.getElementById('modal-map').classList.add('hidden'));
+  safeAddListener('btn-close-viewer', 'click', () => document.getElementById('modal-viewer').classList.add('hidden'));
+
   safeAddListener('btn-save-settings', 'click', () => {
     const titleInput = document.getElementById('setting-title');
     const authorInput = document.getElementById('setting-author');
@@ -357,7 +344,6 @@ window.addEventListener('DOMContentLoaded', () => {
   safeAddListener('btn-export-geojson', 'click', exportGeoJSON);
 });
 
-// Coordinate Freeze Functions
 function freezeCoordinates() {
   state.frozenLat = state.lat || '0.000000';
   state.frozenLng = state.lng || '0.000000';
@@ -377,7 +363,6 @@ function switchScreen(id) {
   document.getElementById(id).classList.add('active');
 }
 
-// Canvas Watermarking & Viewport-Matched Photo Capture
 function processAndSavePhoto() {
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d');
@@ -424,7 +409,6 @@ function processAndSavePhoto() {
 
   const scale = canvas.width / viewportRect.width;
 
-  // Top Brand Tag
   const tagX = 15 * scale;
   const tagY = 15 * scale;
   const tagWidth = 160 * scale;
@@ -437,7 +421,6 @@ function processAndSavePhoto() {
   ctx.fillStyle = "#4CAF50";
   ctx.fillText("MUNDO GeoCam", tagX + (16 * scale), tagY + (24 * scale));
 
-  // Bottom Overlay Panel
   const panelHeight = 110 * scale;
   const panelY = canvas.height - panelHeight;
 
@@ -449,16 +432,14 @@ function processAndSavePhoto() {
   if (state.logoImgObj) {
     const logoSize = 80 * scale;
     const logoY = panelY + ((panelHeight - logoSize) / 2);
-    const borderRadius = 10 * scale; // Adjust radius as needed
+    const borderRadius = 10 * scale;
 
-    ctx.save(); // Save canvas context state
+    ctx.save();
     ctx.beginPath();
     ctx.roundRect(textXOffset, logoY, logoSize, logoSize, borderRadius);
-    ctx.clip(); // Clip canvas to the rounded rectangle shape
-    
+    ctx.clip();
     ctx.drawImage(state.logoImgObj, textXOffset, logoY, logoSize, logoSize);
-    
-    ctx.restore(); // Restore canvas context state so future drawing isn't clipped
+    ctx.restore();
     
     textXOffset += logoSize + (15 * scale);
   }
@@ -499,7 +480,6 @@ function processAndSavePhoto() {
   downloadFile(dataUrl, `MUNDO_${Date.now()}.jpg`);
 }
 
-// Video Canvas Frame Renderer matching viewport exactly
 function drawVideoFrameToCanvas(canvas, ctx) {
   const viewport = viewportEl || document.getElementById('viewport-container');
   const viewportRect = viewport.getBoundingClientRect();
@@ -572,9 +552,7 @@ function drawVideoFrameToCanvas(canvas, ctx) {
     ctx.beginPath();
     ctx.roundRect(textXOffset, logoY, logoSize, logoSize, borderRadius);
     ctx.clip();
-
     ctx.drawImage(state.logoImgObj, textXOffset, logoY, logoSize, logoSize);
-
     ctx.restore();
 
     textXOffset += logoSize + (15 * scale);
@@ -605,7 +583,6 @@ function drawVideoFrameToCanvas(canvas, ctx) {
   }
 }
 
-// Timer Functions
 function startRecordingTimer() {
   state.recordingStartTime = Date.now();
   recTimerEl.classList.remove('hidden');
@@ -625,7 +602,6 @@ function stopRecordingTimer() {
   timerCountEl.innerText = '00:00';
 }
 
-// Video Recording Operations
 function toggleVideoRecording() {
   if (!state.isRecording) {
     state.recordedChunks = [];
@@ -646,7 +622,18 @@ function toggleVideoRecording() {
       ? 'video/mp4' 
       : 'video/webm';
 
-    state.mediaRecorder = new MediaRecorder(canvasStream, { mimeType });
+    const options = {
+      mimeType: mimeType,
+      audioBitsPerSecond: 256000,
+      videoBitsPerSecond: 5000000
+    };
+
+    try {
+      state.mediaRecorder = new MediaRecorder(canvasStream, options);
+    } catch (e) {
+      state.mediaRecorder = new MediaRecorder(canvasStream, { mimeType });
+    }
+
     state.mediaRecorder.ondataavailable = (e) => {
       if (e.data.size > 0) state.recordedChunks.push(e.data);
     };
@@ -671,7 +658,6 @@ function handleVideoStop() {
   const blob = new Blob(state.recordedChunks, { type: mimeType });
   state.pendingVideoBlob = blob;
 
-  // Open modal to request remarks post-recording
   inputRemarks.value = state.lastRemarks;
   document.getElementById('modal-remarks-title').innerText = 'Video Recording Remarks';
   modalRemarks.classList.remove('hidden');
@@ -700,7 +686,6 @@ function processAndSaveVideo(blob) {
   downloadFile(videoUrl, `MUNDO_${Date.now()}.${ext}`);
 }
 
-// IndexedDB Persistence
 function saveToDB(record) {
   const tx = db.transaction("captures", "readwrite");
   tx.objectStore("captures").add(record);
@@ -741,7 +726,7 @@ function renderLibrary() {
 
       const mediaHtml = item.type === 'image' 
         ? `<img src="${item.blobUrl}">` 
-        : `<video src="${item.blobUrl}" controls></video>`;
+        : `<video src="${item.blobUrl}"></video>`;
 
       el.innerHTML = `
         <button class="btn-delete" data-id="${item.id}">🗑️</button>
@@ -754,6 +739,13 @@ function renderLibrary() {
         </div>
       `;
 
+      // Open Viewer on Click
+      el.addEventListener('click', (ev) => {
+        if (!ev.target.classList.contains('btn-delete')) {
+          openMediaViewer(item);
+        }
+      });
+
       el.querySelector('.btn-delete').addEventListener('click', (ev) => {
         ev.stopPropagation();
         if (confirm("Delete this capture?")) {
@@ -765,6 +757,88 @@ function renderLibrary() {
       cursor.continue();
     }
   };
+}
+
+// Lightbox Viewer Implementation
+function openMediaViewer(item) {
+  const modal = document.getElementById('modal-viewer');
+  const mediaContainer = document.getElementById('viewer-media-container');
+  const detailsEl = document.getElementById('viewer-details');
+
+  if (item.type === 'image') {
+    mediaContainer.innerHTML = `<img src="${item.blobUrl}" class="viewer-media">`;
+  } else {
+    mediaContainer.innerHTML = `<video src="${item.blobUrl}" controls autoplay class="viewer-media"></video>`;
+  }
+
+  detailsEl.innerHTML = `
+    <h3>${item.title}</h3>
+    <p>📍 Coordinates: ${item.lat}, ${item.lng}</p>
+    <p>📝 Remarks: ${item.remarks || 'None'}</p>
+    <p>👤 Captured By: ${item.author}</p>
+    <p>🕒 ${item.timestamp}</p>
+  `;
+
+  modal.classList.remove('hidden');
+}
+
+// Leaflet Google Satellite Map View
+function openMapView() {
+  const modal = document.getElementById('modal-map');
+  modal.classList.remove('hidden');
+
+  setTimeout(() => {
+    if (!state.mapInstance) {
+      state.mapInstance = L.map('map-container').setView([8.9, 117.5], 10);
+
+      // Google Satellite basemap layer
+      L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
+        maxZoom: 20,
+        attribution: '&copy; Google Maps'
+      }).addTo(state.mapInstance);
+    }
+
+    state.mapInstance.invalidateSize();
+
+    // Clear existing markers
+    state.mapInstance.eachLayer((layer) => {
+      if (layer instanceof L.Marker) {
+        state.mapInstance.removeLayer(layer);
+      }
+    });
+
+    const tx = db.transaction("captures", "readonly");
+    const bounds = [];
+
+    tx.objectStore("captures").openCursor().onsuccess = (e) => {
+      const cursor = e.target.result;
+      if (cursor) {
+        const item = cursor.value;
+        const lat = parseFloat(item.lat);
+        const lng = parseFloat(item.lng);
+
+        if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
+          const marker = L.marker([lat, lng]).addTo(state.mapInstance);
+          
+          const popupHtml = `
+            <div style="color:#000; font-size:12px;">
+              <strong>${item.title}</strong><br>
+              <img src="${item.blobUrl}" style="width:100%; max-width:150px; height:auto; border-radius:4px; margin:4px 0;"><br>
+              📍 ${lat}, ${lng}<br>
+              <em>${item.remarks || ''}</em>
+            </div>
+          `;
+          marker.bindPopup(popupHtml);
+          bounds.push([lat, lng]);
+        }
+        cursor.continue();
+      } else {
+        if (bounds.length > 0) {
+          state.mapInstance.fitBounds(bounds, { padding: [30, 30] });
+        }
+      }
+    };
+  }, 200);
 }
 
 function deleteCapture(id) {

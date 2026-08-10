@@ -1,4 +1,4 @@
-const CACHE_NAME = 'mundo-geocam-v1';
+const CACHE_NAME = 'mundo-geocam-v2';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -7,44 +7,48 @@ const ASSETS_TO_CACHE = [
   './manifest.json',
   './Icons/mundo.png',
   './Icons/flashT.png',
-  './Icons/w_switch_camera.png'
+  './Icons/w_switch_camera.png',
+  'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css',
+  'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'
 ];
 
-// Install Service Worker and cache all essential static assets and icons
 self.addEventListener('install', (e) => {
   e.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(ASSETS_TO_CACHE);
-    })
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS_TO_CACHE))
   );
   self.skipWaiting();
 });
 
-// Activate & remove old cache versions
 self.addEventListener('activate', (e) => {
   e.waitUntil(
-    caches.keys().then((keys) => {
-      return Promise.all(
-        keys.map((key) => {
-          if (key !== CACHE_NAME) {
-            return caches.delete(key);
-          }
-        })
-      );
-    })
+    caches.keys().then((keys) =>
+      Promise.all(keys.map((key) => key !== CACHE_NAME && caches.delete(key)))
+    )
   );
   self.clients.claim();
 });
 
-// Offline-first Cache Strategy
 self.addEventListener('fetch', (e) => {
   e.respondWith(
     caches.match(e.request).then((cachedResponse) => {
-      return cachedResponse || fetch(e.request).catch(() => {
-        if (e.request.mode === 'navigate') {
-          return caches.match('./index.html');
-        }
-      });
+      if (cachedResponse) return cachedResponse;
+
+      return fetch(e.request)
+        .then((response) => {
+          if (!response || response.status !== 200 || response.type !== 'basic') {
+            return response;
+          }
+          const responseToCache = response.clone();
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(e.request, responseToCache);
+          });
+          return response;
+        })
+        .catch(() => {
+          if (e.request.mode === 'navigate') {
+            return caches.match('./index.html') || caches.match('./');
+          }
+        });
     })
   );
 });
