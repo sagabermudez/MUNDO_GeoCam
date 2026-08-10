@@ -1,4 +1,4 @@
-const CACHE_NAME = 'mundo-geocam-v2';
+const CACHE_NAME = 'mundo-geocam-v3';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -8,17 +8,27 @@ const ASSETS_TO_CACHE = [
   './Icons/mundo.png',
   './Icons/flashT.png',
   './Icons/w_switch_camera.png',
+  './icon-192.png',
+  './icon-512.png',
   'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css',
   'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'
 ];
 
+// Install SW and safely cache assets individually
 self.addEventListener('install', (e) => {
   e.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS_TO_CACHE))
+    caches.open(CACHE_NAME).then((cache) => {
+      return Promise.allSettled(
+        ASSETS_TO_CACHE.map((asset) =>
+          cache.add(asset).catch((err) => console.warn(`Failed to cache ${asset}:`, err))
+        )
+      );
+    })
   );
   self.skipWaiting();
 });
 
+// Activate and purge old caches
 self.addEventListener('activate', (e) => {
   e.waitUntil(
     caches.keys().then((keys) =>
@@ -28,14 +38,18 @@ self.addEventListener('activate', (e) => {
   self.clients.claim();
 });
 
+// Cache-first fetch strategy with network fallback
 self.addEventListener('fetch', (e) => {
+  // Ignore non-GET requests
+  if (e.request.method !== 'GET') return;
+
   e.respondWith(
     caches.match(e.request).then((cachedResponse) => {
       if (cachedResponse) return cachedResponse;
 
       return fetch(e.request)
         .then((response) => {
-          if (!response || response.status !== 200 || response.type !== 'basic') {
+          if (!response || response.status !== 200) {
             return response;
           }
           const responseToCache = response.clone();
