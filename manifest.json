@@ -1,7 +1,7 @@
 {
   "id": "mundo-geocam-app",
   "name": "MUNDO GeoCam",
-  "short_name": "GeoCam",
+  "short_name": "MundoGeoCam",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",

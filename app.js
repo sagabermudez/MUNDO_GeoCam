@@ -16,76 +16,31 @@ dbReq.onsuccess = (e) => {
   loadLibraryThumb(); 
 };
 
-let swRegistration = null;
-
-// Register Service Worker with Manual & Automatic Update Capabilities
+// Register Service Worker with Auto-Update Detection
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('sw.js').then((registration) => {
-    swRegistration = registration;
-
-    // Trigger update checks periodically when online
+    
+    // Check for sw.js updates every 60 seconds automatically
     setInterval(() => {
-      if (navigator.onLine) registration.update();
+      registration.update();
     }, 60000);
 
-    // Listen for new service worker installation
-    registration.addEventListener('updatefound', () => {
-      const newWorker = registration.installing;
-      if (!newWorker) return;
-
-      newWorker.addEventListener('statechange', () => {
-        if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-          // Tell new worker to activate instantly
-          newWorker.postMessage({ action: 'skipWaiting' });
-        }
-      });
+    // Also check for updates when the app/browser regains focus
+    window.addEventListener('focus', () => {
+      registration.update();
     });
 
   }).catch(console.error);
 
-  // Reload client when the new service worker takes control
+  // Automatically reload the app when the new Service Worker takes over control
   let refreshing = false;
   navigator.serviceWorker.addEventListener('controllerchange', () => {
     if (!refreshing) {
       refreshing = true;
-      alert("App updated successfully! Reloading...");
       window.location.reload();
     }
   });
 }
-
-// Add Click Handler for "Check for Updates" Button inside DOMContentLoaded
-safeAddListener('btn-check-update', 'click', async () => {
-  if (!navigator.onLine) {
-    alert("You are currently offline. Connect to the internet to check for updates.");
-    return;
-  }
-
-  if (!swRegistration) {
-    alert("Service worker is not active.");
-    return;
-  }
-
-  const btn = document.getElementById('btn-check-update');
-  if (btn) btn.innerText = "Checking...";
-
-  try {
-    await swRegistration.update();
-    
-    // Brief delay to evaluate if a new worker was found
-    setTimeout(() => {
-      if (!swRegistration.installing && !swRegistration.waiting) {
-        alert("Your app is already up to date!");
-      }
-      if (btn) btn.innerText = "🔄 Check for Updates";
-    }, 1500);
-
-  } catch (err) {
-    console.error("Update check failed:", err);
-    alert("Could not check for updates. Please try again.");
-    if (btn) btn.innerText = "🔄 Check for Updates";
-  }
-});
 
 // State Management
 const state = {
