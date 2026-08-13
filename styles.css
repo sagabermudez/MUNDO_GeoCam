@@ -517,13 +517,12 @@ textarea { height: 80px; resize: none; }
   grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
   gap: 10px;
   padding: 20px;
-  
+  overflow-y: auto;
 }
 
 .grid-item {
   position: relative;
   border-radius: 8px;
-  overflow: hidden;
   background: #1e1e1e;
   display: flex;
   flex-direction: column;
