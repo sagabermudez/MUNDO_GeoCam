@@ -885,6 +885,31 @@ function downloadFile(url, filename) {
   a.click();
 }
 
+// Share File via Web Share API with Direct Download Fallback
+async function shareOrDownloadFile(file, filename) {
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try {
+      await navigator.share({
+        files: [file],
+        title: 'MUNDO GeoCam Export',
+        text: `Exported data file: ${filename}`
+      });
+      return;
+    } catch (err) {
+      if (err.name !== 'AbortError') {
+        console.error('Error sharing file:', err);
+      } else {
+        return; // User cancelled share modal
+      }
+    }
+  }
+
+  // Fallback for browsers or desktop environments without file-sharing capabilities
+  const url = URL.createObjectURL(file);
+  downloadFile(url, filename);
+  URL.revokeObjectURL(url);
+}
+
 function exportCSV() {
   const tx = db.transaction("captures", "readonly");
   const records = [];
@@ -898,8 +923,12 @@ function exportCSV() {
       records.forEach(r => {
         csv += `"${r.id}","${r.type}","${r.title}","${r.lat}","${r.lng}","${r.remarks}","${r.author}","${r.timestamp}"\n`;
       });
-      const blob = new Blob([csv], { type: 'text/csv' });
-      downloadFile(URL.createObjectURL(blob), `MUNDO_Export_${Date.now()}.csv`);
+
+      const filename = `MUNDO_Export_${Date.now()}.csv`;
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const file = new File([blob], filename, { type: 'text/csv' });
+
+      shareOrDownloadFile(file, filename);
     }
   };
 }
@@ -931,8 +960,12 @@ function exportGeoJSON() {
       cursor.continue();
     } else {
       const geojson = { type: "FeatureCollection", features: features };
-      const blob = new Blob([JSON.stringify(geojson, null, 2)], { type: 'application/json' });
-      downloadFile(URL.createObjectURL(blob), `MUNDO_Export_${Date.now()}.geojson`);
+      const filename = `MUNDO_Export_${Date.now()}.geojson`;
+      const blob = new Blob([JSON.stringify(geojson, null, 2)], { type: 'application/geo+json' });
+      const file = new File([blob], filename, { type: 'application/geo+json' });
+
+      shareOrDownloadFile(file, filename);
     }
   };
 }
+
