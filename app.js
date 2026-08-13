@@ -62,7 +62,8 @@ const state = {
   logoImgObj: null,
   lat: null,
   lng: null,
-  mapInstance: null
+  mapInstance: null,
+  selectedIds: new Set()
 };
 
 // UI Elements
@@ -103,7 +104,6 @@ function loadSavedSettings() {
     document.getElementById('disp-author').innerText = `Photo captured by: ${state.author}`;
   }
   
-  // Show default remarks in live overlay bottom panel only if set in settings
   const dispRemarksEl = document.getElementById('disp-remarks');
   if (dispRemarksEl) {
     dispRemarksEl.innerText = state.defaultRemarks ? `Remarks: ${state.defaultRemarks}` : 'Remarks: ';
@@ -248,7 +248,6 @@ window.addEventListener('DOMContentLoaded', () => {
     if (state.mode === 'PHOTO') {
       freezeCoordinates();
       videoEl.pause();
-      // Pre-fill prompt with default remarks preset without binding it as new default
       inputRemarks.value = state.defaultRemarks;
       document.getElementById('modal-remarks-title').innerText = 'Photo Capture Remarks';
       modalRemarks.classList.remove('hidden');
@@ -305,6 +304,20 @@ window.addEventListener('DOMContentLoaded', () => {
   safeAddListener('btn-view-map', 'click', openMapView);
   safeAddListener('btn-close-map', 'click', () => document.getElementById('modal-map').classList.add('hidden'));
   safeAddListener('btn-close-viewer', 'click', () => document.getElementById('modal-viewer').classList.add('hidden'));
+
+  safeAddListener('chk-select-all', 'change', (e) => {
+    const checkboxes = document.querySelectorAll('.item-select-chk');
+    checkboxes.forEach(chk => {
+      chk.checked = e.target.checked;
+      const id = parseInt(chk.dataset.id);
+      if (e.target.checked) {
+        state.selectedIds.add(id);
+      } else {
+        state.selectedIds.delete(id);
+      }
+    });
+    updateSelectionCounter();
+  });
 
   safeAddListener('btn-save-settings', 'click', () => {
     const titleInput = document.getElementById('setting-title');
@@ -478,7 +491,6 @@ function processAndSavePhoto(capturedRemarks) {
   ctx.font = `bold ${14 * scale}px -apple-system, sans-serif`;
   ctx.fillText(`📍 ${activeLat}, ${activeLng}`, textXOffset, panelY + (52 * scale));
 
-  // Burn captured photo remarks onto the image
   ctx.fillStyle = "#DDDDDD";
   ctx.font = `${12 * scale}px -apple-system, sans-serif`;
   ctx.fillText(`Remarks: ${capturedRemarks || ''}`, textXOffset, panelY + (74 * scale));
@@ -738,6 +750,11 @@ function renderLibrary() {
   const grid = document.getElementById('library-grid');
   if (!grid) return;
   grid.innerHTML = '';
+  state.selectedIds.clear();
+  updateSelectionCounter();
+
+  const selectAllChk = document.getElementById('chk-select-all');
+  if (selectAllChk) selectAllChk.checked = false;
 
   const tx = db.transaction("captures", "readonly");
   tx.objectStore("captures").openCursor(null, 'prev').onsuccess = (e) => {
@@ -752,6 +769,7 @@ function renderLibrary() {
         : `<video src="${item.blobUrl}"></video>`;
 
       el.innerHTML = `
+        <input type="checkbox" class="item-select-chk" data-id="${item.id}">
         <button class="btn-delete" data-id="${item.id}">🗑️</button>
         ${mediaHtml}
         <div class="grid-info">
@@ -762,8 +780,19 @@ function renderLibrary() {
         </div>
       `;
 
+      const chk = el.querySelector('.item-select-chk');
+      chk.addEventListener('change', (ev) => {
+        ev.stopPropagation();
+        if (chk.checked) {
+          state.selectedIds.add(item.id);
+        } else {
+          state.selectedIds.delete(item.id);
+        }
+        updateSelectionCounter();
+      });
+
       el.addEventListener('click', (ev) => {
-        if (!ev.target.classList.contains('btn-delete')) {
+        if (!ev.target.classList.contains('btn-delete') && !ev.target.classList.contains('item-select-chk')) {
           openMediaViewer(item);
         }
       });
@@ -779,6 +808,14 @@ function renderLibrary() {
       cursor.continue();
     }
   };
+}
+
+function updateSelectionCounter() {
+  const counterEl = document.getElementById('select-count');
+  if (counterEl) {
+    const count = state.selectedIds.size;
+    counterEl.innerText = count > 0 ? `(${count} selected)` : '';
+  }
 }
 
 function openMediaViewer(item) {
@@ -803,7 +840,6 @@ function openMediaViewer(item) {
   modal.classList.remove('hidden');
 }
 
-// Leaflet Map with Circle Markers rendered above map tiles
 function openMapView() {
   const modal = document.getElementById('modal-map');
   modal.classList.remove('hidden');
@@ -820,7 +856,6 @@ function openMapView() {
 
     state.mapInstance.invalidateSize();
 
-    // Clear existing layer markers
     state.mapInstance.eachLayer((layer) => {
       if (layer instanceof L.CircleMarker || layer instanceof L.Marker) {
         state.mapInstance.removeLayer(layer);
@@ -838,7 +873,6 @@ function openMapView() {
         const lng = parseFloat(item.lng);
 
         if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
-          // Render circle marker above satellite tiles
           const circleMarker = L.circleMarker([lat, lng], {
             radius: 8,
             fillColor: '#FF3366',
@@ -885,7 +919,6 @@ function downloadFile(url, filename) {
   a.click();
 }
 
-// Share File via Web Share API with Direct Download Fallback
 async function shareOrDownloadFile(file, filename) {
   if (navigator.canShare && navigator.canShare({ files: [file] })) {
     try {
@@ -899,47 +932,62 @@ async function shareOrDownloadFile(file, filename) {
       if (err.name !== 'AbortError') {
         console.error('Error sharing file:', err);
       } else {
-        return; // User cancelled share modal
+        return;
       }
     }
   }
 
-  // Fallback for browsers or desktop environments without file-sharing capabilities
   const url = URL.createObjectURL(file);
   downloadFile(url, filename);
   URL.revokeObjectURL(url);
 }
 
-function exportCSV() {
+function fetchTargetRecords(callback) {
   const tx = db.transaction("captures", "readonly");
   const records = [];
   tx.objectStore("captures").openCursor().onsuccess = (e) => {
     const cursor = e.target.result;
     if (cursor) {
-      records.push(cursor.value);
+      const item = cursor.value;
+      if (state.selectedIds.size === 0 || state.selectedIds.has(item.id)) {
+        records.push(item);
+      }
       cursor.continue();
     } else {
-      let csv = "ID,Type,Title,Latitude,Longitude,Remarks,Author,Timestamp\n";
-      records.forEach(r => {
-        csv += `"${r.id}","${r.type}","${r.title}","${r.lat}","${r.lng}","${r.remarks}","${r.author}","${r.timestamp}"\n`;
-      });
-
-      const filename = `MUNDO_Export_${Date.now()}.csv`;
-      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-      const file = new File([blob], filename, { type: 'text/csv' });
-
-      shareOrDownloadFile(file, filename);
+      callback(records);
     }
   };
 }
 
+function exportCSV() {
+  fetchTargetRecords((records) => {
+    if (records.length === 0) {
+      alert("No captures available to export.");
+      return;
+    }
+
+    let csv = "ID,Type,Title,Latitude,Longitude,Remarks,Author,Timestamp\n";
+    records.forEach(r => {
+      csv += `"${r.id}","${r.type}","${r.title}","${r.lat}","${r.lng}","${r.remarks}","${r.author}","${r.timestamp}"\n`;
+    });
+
+    const filename = `MUNDO_Export_${Date.now()}.csv`;
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const file = new File([blob], filename, { type: 'text/csv' });
+
+    shareOrDownloadFile(file, filename);
+  });
+}
+
 function exportGeoJSON() {
-  const tx = db.transaction("captures", "readonly");
-  const features = [];
-  tx.objectStore("captures").openCursor().onsuccess = (e) => {
-    const cursor = e.target.result;
-    if (cursor) {
-      const r = cursor.value;
+  fetchTargetRecords((records) => {
+    if (records.length === 0) {
+      alert("No captures available to export.");
+      return;
+    }
+
+    const features = [];
+    records.forEach(r => {
       if (r.lat && r.lng) {
         features.push({
           type: "Feature",
@@ -957,17 +1005,13 @@ function exportGeoJSON() {
           }
         });
       }
-      cursor.continue();
-    } else {
-      const geojson = { type: "FeatureCollection", features: features };
-      const filename = `MUNDO_Export_${Date.now()}.geojson`;
-      
-      // Use 'application/json' instead of 'application/geo+json' so mobile OS share sheets accept the file
-      const blob = new Blob([JSON.stringify(geojson, null, 2)], { type: 'application/json' });
-      const file = new File([blob], filename, { type: 'application/json' });
+    });
 
-      shareOrDownloadFile(file, filename);
-    }
-  };
+    const geojson = { type: "FeatureCollection", features: features };
+    const filename = `MUNDO_Export_${Date.now()}.geojson`;
+    const blob = new Blob([JSON.stringify(geojson, null, 2)], { type: 'application/json' });
+    const file = new File([blob], filename, { type: 'application/json' });
+
+    shareOrDownloadFile(file, filename);
+  });
 }
-
