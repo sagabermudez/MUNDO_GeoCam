@@ -16,9 +16,30 @@ dbReq.onsuccess = (e) => {
   loadLibraryThumb(); 
 };
 
-// Register Service Worker
+// Register Service Worker with Auto-Update Detection
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('sw.js').catch(console.error);
+  navigator.serviceWorker.register('sw.js').then((registration) => {
+    
+    // Check for sw.js updates every 60 seconds automatically
+    setInterval(() => {
+      registration.update();
+    }, 60000);
+
+    // Also check for updates when the app/browser regains focus
+    window.addEventListener('focus', () => {
+      registration.update();
+    });
+
+  }).catch(console.error);
+
+  // Automatically reload the app when the new Service Worker takes over control
+  let refreshing = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!refreshing) {
+      refreshing = true;
+      window.location.reload();
+    }
+  });
 }
 
 // State Management
