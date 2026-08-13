@@ -16,31 +16,76 @@ dbReq.onsuccess = (e) => {
   loadLibraryThumb(); 
 };
 
-// Register Service Worker with Auto-Update Detection
+let swRegistration = null;
+
+// Register Service Worker with Manual & Automatic Update Capabilities
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('sw.js').then((registration) => {
-    
-    // Check for sw.js updates every 60 seconds automatically
+    swRegistration = registration;
+
+    // Trigger update checks periodically when online
     setInterval(() => {
-      registration.update();
+      if (navigator.onLine) registration.update();
     }, 60000);
 
-    // Also check for updates when the app/browser regains focus
-    window.addEventListener('focus', () => {
-      registration.update();
+    // Listen for new service worker installation
+    registration.addEventListener('updatefound', () => {
+      const newWorker = registration.installing;
+      if (!newWorker) return;
+
+      newWorker.addEventListener('statechange', () => {
+        if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+          // Tell new worker to activate instantly
+          newWorker.postMessage({ action: 'skipWaiting' });
+        }
+      });
     });
 
   }).catch(console.error);
 
-  // Automatically reload the app when the new Service Worker takes over control
+  // Reload client when the new service worker takes control
   let refreshing = false;
   navigator.serviceWorker.addEventListener('controllerchange', () => {
     if (!refreshing) {
       refreshing = true;
+      alert("App updated successfully! Reloading...");
       window.location.reload();
     }
   });
 }
+
+// Add Click Handler for "Check for Updates" Button inside DOMContentLoaded
+safeAddListener('btn-check-update', 'click', async () => {
+  if (!navigator.onLine) {
+    alert("You are currently offline. Connect to the internet to check for updates.");
+    return;
+  }
+
+  if (!swRegistration) {
+    alert("Service worker is not active.");
+    return;
+  }
+
+  const btn = document.getElementById('btn-check-update');
+  if (btn) btn.innerText = "Checking...";
+
+  try {
+    await swRegistration.update();
+    
+    // Brief delay to evaluate if a new worker was found
+    setTimeout(() => {
+      if (!swRegistration.installing && !swRegistration.waiting) {
+        alert("Your app is already up to date!");
+      }
+      if (btn) btn.innerText = "🔄 Check for Updates";
+    }, 1500);
+
+  } catch (err) {
+    console.error("Update check failed:", err);
+    alert("Could not check for updates. Please try again.");
+    if (btn) btn.innerText = "🔄 Check for Updates";
+  }
+});
 
 // State Management
 const state = {
@@ -961,8 +1006,10 @@ function exportGeoJSON() {
     } else {
       const geojson = { type: "FeatureCollection", features: features };
       const filename = `MUNDO_Export_${Date.now()}.geojson`;
-      const blob = new Blob([JSON.stringify(geojson, null, 2)], { type: 'application/geo+json' });
-      const file = new File([blob], filename, { type: 'application/geo+json' });
+      
+      // Use 'application/json' instead of 'application/geo+json' so mobile OS share sheets accept the file
+      const blob = new Blob([JSON.stringify(geojson, null, 2)], { type: 'application/json' });
+      const file = new File([blob], filename, { type: 'application/json' });
 
       shareOrDownloadFile(file, filename);
     }
