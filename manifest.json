@@ -1,7 +1,7 @@
 {
   "id": "mundo-geocam-app",
   "name": "MUNDO GeoCam",
-  "short_name": "Mundo GeoCam",
+  "short_name": "MUNDO GeoCam",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
@@ -33,5 +33,7 @@
       "type": "image/png",
       "purpose": "maskable"
     }
-  ]
+  ],
+  "lang": "en",
+  "description": "MUNDO GeoCam is designed for field surveys, geo-tagging, and geospatial media management. Built to operate seamlessly in low-connectivity or offline environments, it enables field personnel to capture location-stamped photos and videos, map recorded data, and export structured datasets directly from their mobile devices."
 }
