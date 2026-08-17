@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
@@ -9,6 +10,7 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="styles.css">
 </head>
+
 <body>
   <div id="app">
     <!-- Camera View Screen -->
@@ -23,20 +25,20 @@
 
       <div id="viewport-container">
         <video id="video-preview" autoplay playsinline muted></video>
-        
+
         <div id="recording-timer" class="rec-pill hidden">
           <span class="rec-dot"></span>
           <span id="timer-count">00:00</span>
         </div>
 
         <div id="overlay-brand" class="brand-pill">MUNDO GeoCam</div>
-        
+
         <div id="overlay-bottom-panel" class="bottom-panel">
           <div class="panel-left">
             <div id="logo-panel" class="logo-panel">
               <img id="overlay-logo" src="Icons/mundo.png" alt="Office Logo">
             </div>
-            
+
             <div class="panel-text">
               <div id="disp-survey-title" class="title-text">PROJECT</div>
               <div id="disp-coords" class="coords-text">📍 Waiting for GPS...</div>
@@ -82,13 +84,17 @@
         <h2>Media Library</h2>
         <div></div>
       </div>
+      <!-- Replace the existing export-bar div inside #library-screen with this -->
       <div class="export-bar">
-        <label class="select-all-label">
-          <input type="checkbox" id="chk-select-all"> Select All <span id="select-count"></span>
-        </label>
-        <button id="btn-view-map" class="btn-pri">View in Map</button>
-        <button id="btn-export-csv" class="btn-sec">Export CSV</button>
-        <button id="btn-export-geojson" class="btn-sec">Export GeoJSON</button>
+        <div class="export-actions">
+          <button id="btn-view-map" class="btn-pri">View in Map</button>
+          <button id="btn-export-csv" class="btn-sec">Export CSV</button>
+          <button id="btn-export-geojson" class="btn-sec">Export GeoJSON</button>
+        </div>
+        <div class="select-actions">
+          <button id="btn-select-all" class="btn-sec">Select All</button>
+          <button id="btn-deselect-all" class="btn-sec">Deselect All</button>
+        </div>
       </div>
       <div id="library-grid" class="grid-container"></div>
     </div>
@@ -135,7 +141,7 @@
         </label>
 
         <button id="btn-save-settings" class="btn-pri">Save Settings</button>
-      
+
         <footer class="settings-credit">
           PWA developed by Alexis S. Bermudez
         </footer>
@@ -147,4 +153,5 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="app.js"></script>
 </body>
+
 </html>

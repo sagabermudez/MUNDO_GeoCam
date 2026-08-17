@@ -16,23 +16,23 @@ dbReq.onsuccess = (e) => {
   loadLibraryThumb(); 
 };
 
-// Register Service Worker with Auto-Update Detection
+// Register Service Worker with Auto-Update Detection[cite: 2]
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('sw.js').then((registration) => {
     
-    // Check for sw.js updates every 60 seconds automatically
+    // Check for sw.js updates every 60 seconds automatically[cite: 2]
     setInterval(() => {
       registration.update();
     }, 60000);
 
-    // Also check for updates when the app/browser regains focus
+    // Also check for updates when the app/browser regains focus[cite: 2]
     window.addEventListener('focus', () => {
       registration.update();
     });
 
   }).catch(console.error);
 
-  // Automatically reload the app when the new Service Worker takes over control
+  // Automatically reload the app when the new Service Worker takes over control[cite: 2]
   let refreshing = false;
   navigator.serviceWorker.addEventListener('controllerchange', () => {
     if (!refreshing) {
@@ -42,7 +42,42 @@ if ('serviceWorker' in navigator) {
   });
 }
 
-// State Management
+// Custom PWA App Installation Handler
+let deferredPrompt;
+const installBtn = document.createElement('button');
+installBtn.innerText = 'Install App';
+installBtn.className = 'btn-pri';
+installBtn.style.display = 'none';
+installBtn.style.fontSize = '10px';
+installBtn.style.padding = '4px 8px';
+
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredPrompt = e;
+  
+  const topBar = document.querySelector('.top-bar');
+  if (topBar && !topBar.contains(installBtn)) {
+    topBar.insertBefore(installBtn, topBar.children[1]);
+  }
+  installBtn.style.display = 'inline-block';
+
+  installBtn.addEventListener('click', async () => {
+    installBtn.style.display = 'none';
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      console.log(`User installation decision: ${outcome}`);
+      deferredPrompt = null;
+    }
+  });
+});
+
+window.addEventListener('appinstalled', () => {
+  installBtn.style.display = 'none';
+  deferredPrompt = null;
+});
+
+// State Management[cite: 2]
 const state = {
   mode: 'PHOTO',
   facingMode: 'environment',
@@ -66,7 +101,7 @@ const state = {
   selectedIds: new Set()
 };
 
-// UI Elements
+// UI Elements[cite: 2]
 const videoEl = document.getElementById('video-preview');
 const viewportEl = document.getElementById('viewport-container');
 const btnShutter = document.getElementById('btn-shutter');
@@ -104,6 +139,7 @@ function loadSavedSettings() {
     document.getElementById('disp-author').innerText = `Photo captured by: ${state.author}`;
   }
   
+  // Show default remarks in live overlay bottom panel only if set in settings[cite: 2]
   const dispRemarksEl = document.getElementById('disp-remarks');
   if (dispRemarksEl) {
     dispRemarksEl.innerText = state.defaultRemarks ? `Remarks: ${state.defaultRemarks}` : 'Remarks: ';
@@ -248,6 +284,7 @@ window.addEventListener('DOMContentLoaded', () => {
     if (state.mode === 'PHOTO') {
       freezeCoordinates();
       videoEl.pause();
+      // Pre-fill prompt with default remarks preset without binding it as new default[cite: 2]
       inputRemarks.value = state.defaultRemarks;
       document.getElementById('modal-remarks-title').innerText = 'Photo Capture Remarks';
       modalRemarks.classList.remove('hidden');
@@ -305,20 +342,6 @@ window.addEventListener('DOMContentLoaded', () => {
   safeAddListener('btn-close-map', 'click', () => document.getElementById('modal-map').classList.add('hidden'));
   safeAddListener('btn-close-viewer', 'click', () => document.getElementById('modal-viewer').classList.add('hidden'));
 
-  safeAddListener('chk-select-all', 'change', (e) => {
-    const checkboxes = document.querySelectorAll('.item-select-chk');
-    checkboxes.forEach(chk => {
-      chk.checked = e.target.checked;
-      const id = parseInt(chk.dataset.id);
-      if (e.target.checked) {
-        state.selectedIds.add(id);
-      } else {
-        state.selectedIds.delete(id);
-      }
-    });
-    updateSelectionCounter();
-  });
-
   safeAddListener('btn-save-settings', 'click', () => {
     const titleInput = document.getElementById('setting-title');
     const authorInput = document.getElementById('setting-author');
@@ -373,6 +396,22 @@ window.addEventListener('DOMContentLoaded', () => {
     }
 
     switchScreen('camera-screen');
+  });
+
+  safeAddListener('btn-select-all', 'click', () => {
+    document.querySelectorAll('.item-checkbox').forEach(cb => {
+      cb.checked = true;
+      state.selectedIds.add(Number(cb.dataset.id));
+      cb.closest('.grid-item').classList.add('selected');
+    });
+  });
+
+  safeAddListener('btn-deselect-all', 'click', () => {
+    document.querySelectorAll('.item-checkbox').forEach(cb => {
+      cb.checked = false;
+      cb.closest('.grid-item').classList.remove('selected');
+    });
+    state.selectedIds.clear();
   });
 
   safeAddListener('btn-export-csv', 'click', exportCSV);
@@ -491,6 +530,7 @@ function processAndSavePhoto(capturedRemarks) {
   ctx.font = `bold ${14 * scale}px -apple-system, sans-serif`;
   ctx.fillText(`📍 ${activeLat}, ${activeLng}`, textXOffset, panelY + (52 * scale));
 
+  // Burn captured photo remarks onto the image[cite: 2]
   ctx.fillStyle = "#DDDDDD";
   ctx.font = `${12 * scale}px -apple-system, sans-serif`;
   ctx.fillText(`Remarks: ${capturedRemarks || ''}`, textXOffset, panelY + (74 * scale));
@@ -751,10 +791,6 @@ function renderLibrary() {
   if (!grid) return;
   grid.innerHTML = '';
   state.selectedIds.clear();
-  updateSelectionCounter();
-
-  const selectAllChk = document.getElementById('chk-select-all');
-  if (selectAllChk) selectAllChk.checked = false;
 
   const tx = db.transaction("captures", "readonly");
   tx.objectStore("captures").openCursor(null, 'prev').onsuccess = (e) => {
@@ -769,8 +805,10 @@ function renderLibrary() {
         : `<video src="${item.blobUrl}"></video>`;
 
       el.innerHTML = `
-        <input type="checkbox" class="item-select-chk" data-id="${item.id}">
-        <button class="btn-delete" data-id="${item.id}">🗑️</button>
+        <div class="item-checkbox-wrapper">
+          <input type="checkbox" class="item-checkbox" data-id="${item.id}">
+        </div>
+        <button class="btn-delete" data-id="${item.id}" title="Delete Item">✕</button>
         ${mediaHtml}
         <div class="grid-info">
           <strong>${item.title}</strong><br>
@@ -780,23 +818,28 @@ function renderLibrary() {
         </div>
       `;
 
-      const chk = el.querySelector('.item-select-chk');
-      chk.addEventListener('change', (ev) => {
+      const checkbox = el.querySelector('.item-checkbox');
+
+      // Sync checkbox state with state management[cite: 2]
+      checkbox.addEventListener('change', (ev) => {
         ev.stopPropagation();
-        if (chk.checked) {
+        if (checkbox.checked) {
           state.selectedIds.add(item.id);
+          el.classList.add('selected');
         } else {
           state.selectedIds.delete(item.id);
+          el.classList.remove('selected');
         }
-        updateSelectionCounter();
       });
 
+      // Open detail viewer when clicking media element[cite: 2]
       el.addEventListener('click', (ev) => {
-        if (!ev.target.classList.contains('btn-delete') && !ev.target.classList.contains('item-select-chk')) {
+        if (!ev.target.classList.contains('btn-delete') && !ev.target.classList.contains('item-checkbox')) {
           openMediaViewer(item);
         }
       });
 
+      // Handle item deletion[cite: 2]
       el.querySelector('.btn-delete').addEventListener('click', (ev) => {
         ev.stopPropagation();
         if (confirm("Delete this capture?")) {
@@ -808,14 +851,6 @@ function renderLibrary() {
       cursor.continue();
     }
   };
-}
-
-function updateSelectionCounter() {
-  const counterEl = document.getElementById('select-count');
-  if (counterEl) {
-    const count = state.selectedIds.size;
-    counterEl.innerText = count > 0 ? `(${count} selected)` : '';
-  }
 }
 
 function openMediaViewer(item) {
@@ -840,6 +875,7 @@ function openMediaViewer(item) {
   modal.classList.remove('hidden');
 }
 
+// Leaflet Map with Circle Markers rendered above map tiles[cite: 2]
 function openMapView() {
   const modal = document.getElementById('modal-map');
   modal.classList.remove('hidden');
@@ -856,6 +892,7 @@ function openMapView() {
 
     state.mapInstance.invalidateSize();
 
+    // Clear existing layer markers[cite: 2]
     state.mapInstance.eachLayer((layer) => {
       if (layer instanceof L.CircleMarker || layer instanceof L.Marker) {
         state.mapInstance.removeLayer(layer);
@@ -873,6 +910,7 @@ function openMapView() {
         const lng = parseFloat(item.lng);
 
         if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
+          // Render circle marker above satellite tiles[cite: 2]
           const circleMarker = L.circleMarker([lat, lng], {
             radius: 8,
             fillColor: '#FF3366',
@@ -919,99 +957,113 @@ function downloadFile(url, filename) {
   a.click();
 }
 
-async function shareOrDownloadFile(file, filename) {
-  if (navigator.canShare && navigator.canShare({ files: [file] })) {
-    try {
-      await navigator.share({
-        files: [file],
-        title: 'MUNDO GeoCam Export',
-        text: `Exported data file: ${filename}`
-      });
-      return;
-    } catch (err) {
-      if (err.name !== 'AbortError') {
-        console.error('Error sharing file:', err);
-      } else {
-        return;
-      }
+// Direct Mobile File Exporter Module
+const ExportHelper = {
+  saveLocalFile(content, defaultName, extension, mimeType) {
+    let userFileName = prompt(`Enter a filename for the ${extension.toUpperCase()} export:`, defaultName);
+    if (!userFileName) return; // User cancelled prompt
+
+    userFileName = userFileName.trim() || defaultName;
+    const finalName = userFileName.endsWith(extension) ? userFileName : `${userFileName}${extension}`;
+    
+    // Create Blob object and force direct download link
+    const blob = new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = finalName;
+    a.style.display = 'none';
+    
+    document.body.appendChild(a);
+    a.click();
+    
+    // Cleanup URL and element after download is triggered
+    setTimeout(() => {
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, 100);
+  },
+
+  escapeCSV(str) {
+    if (str == null) return '';
+    const stringified = String(str);
+    if (stringified.includes(',') || stringified.includes('"') || stringified.includes('\n')) {
+      return `"${stringified.replace(/"/g, '""')}"`;
     }
+    return stringified;
   }
+};
 
-  const url = URL.createObjectURL(file);
-  downloadFile(url, filename);
-  URL.revokeObjectURL(url);
-}
-
-function fetchTargetRecords(callback) {
+// Helper to filter records for export based on user selection[cite: 2]
+function getRecordsForExport(callback) {
   const tx = db.transaction("captures", "readonly");
   const records = [];
   tx.objectStore("captures").openCursor().onsuccess = (e) => {
     const cursor = e.target.result;
     if (cursor) {
-      const item = cursor.value;
-      if (state.selectedIds.size === 0 || state.selectedIds.has(item.id)) {
-        records.push(item);
+      // Export only selected items if any are checked; otherwise export all[cite: 2]
+      if (state.selectedIds.size === 0 || state.selectedIds.has(cursor.value.id)) {
+        records.push(cursor.value);
       }
       cursor.continue();
     } else {
+      if (records.length === 0) {
+        alert("No items selected or available to export.");
+        return;
+      }
       callback(records);
     }
   };
 }
 
 function exportCSV() {
-  fetchTargetRecords((records) => {
-    if (records.length === 0) {
-      alert("No captures available to export.");
-      return;
-    }
+  getRecordsForExport((records) => {
+    const formattedDate = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const defaultName = `export_${formattedDate}`;
 
     let csv = "ID,Type,Title,Latitude,Longitude,Remarks,Author,Timestamp\n";
     records.forEach(r => {
-      csv += `"${r.id}","${r.type}","${r.title}","${r.lat}","${r.lng}","${r.remarks}","${r.author}","${r.timestamp}"\n`;
+      csv += [
+        r.id,
+        r.type,
+        ExportHelper.escapeCSV(r.title),
+        r.lat,
+        r.lng,
+        ExportHelper.escapeCSV(r.remarks),
+        ExportHelper.escapeCSV(r.author),
+        ExportHelper.escapeCSV(r.timestamp)
+      ].join(',') + '\n';
     });
 
-    const filename = `MUNDO_Export_${Date.now()}.csv`;
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const file = new File([blob], filename, { type: 'text/csv' });
-
-    shareOrDownloadFile(file, filename);
+    ExportHelper.saveLocalFile(csv, defaultName, '.csv', 'text/csv;charset=utf-8;');
   });
 }
 
 function exportGeoJSON() {
-  fetchTargetRecords((records) => {
-    if (records.length === 0) {
-      alert("No captures available to export.");
-      return;
-    }
+  getRecordsForExport((records) => {
+    const formattedDate = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const defaultName = `export_${formattedDate}`;
 
-    const features = [];
-    records.forEach(r => {
-      if (r.lat && r.lng) {
-        features.push({
-          type: "Feature",
-          geometry: {
-            type: "Point",
-            coordinates: [parseFloat(r.lng), parseFloat(r.lat)]
-          },
-          properties: {
-            id: r.id,
-            type: r.type,
-            title: r.title,
-            remarks: r.remarks,
-            author: r.author,
-            timestamp: r.timestamp
-          }
-        });
-      }
-    });
+    const features = records
+      .filter(r => r.lat && r.lng)
+      .map(r => ({
+        type: "Feature",
+        geometry: {
+          type: "Point",
+          coordinates: [parseFloat(r.lng), parseFloat(r.lat)]
+        },
+        properties: {
+          id: r.id,
+          type: r.type,
+          title: r.title,
+          remarks: r.remarks,
+          author: r.author,
+          timestamp: r.timestamp
+        }
+      }));
 
-    const geojson = { type: "FeatureCollection", features: features };
-    const filename = `MUNDO_Export_${Date.now()}.geojson`;
-    const blob = new Blob([JSON.stringify(geojson, null, 2)], { type: 'application/json' });
-    const file = new File([blob], filename, { type: 'application/json' });
-
-    shareOrDownloadFile(file, filename);
+    const geojson = JSON.stringify({ type: "FeatureCollection", features: features }, null, 2);
+    ExportHelper.saveLocalFile(geojson, defaultName, '.geojson', 'application/geo+json');
   });
 }

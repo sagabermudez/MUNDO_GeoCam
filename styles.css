@@ -508,19 +508,8 @@ textarea { height: 80px; resize: none; }
 
 .export-bar {
   display: flex;
-  align-items: center;
   gap: 10px;
   padding: 10px 20px;
-  flex-wrap: wrap;
-}
-
-.select-all-label {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: #ccc;
-  cursor: pointer;
 }
 
 .grid-container {
@@ -547,17 +536,6 @@ textarea { height: 80px; resize: none; }
 }
 
 .grid-info { padding: 6px; font-size: 10px; }
-
-.item-select-chk {
-  position: absolute;
-  top: 8px;
-  left: 8px;
-  width: 22px;
-  height: 22px;
-  z-index: 5;
-  accent-color: #0a84ff;
-  cursor: pointer;
-}
 
 .settings-form {
   padding: 20px;
@@ -598,4 +576,156 @@ textarea { height: 80px; resize: none; }
 .btn-delete:hover {
   background: rgba(255, 0, 0, 1);
   transform: scale(1.1);
+}
+/* Add/Append these styles to styles.css */
+
+/* Clean & Professional Export & Selection Toolbar */
+.export-bar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 20px;
+  background: #141416;
+  border-bottom: 1px solid #2a2a2d;
+}
+
+.export-actions, .select-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Base Button Refinements */
+.btn-pri, .btn-sec {
+  padding: 8px 14px;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+  font-size: 12px;
+  letter-spacing: 0.3px;
+  transition: all 0.2s ease;
+}
+
+.btn-pri {
+  background: #0066cc;
+  color: #ffffff;
+  border: 1px solid #0052a3;
+}
+
+.btn-pri:hover {
+  background: #0052a3;
+}
+
+.btn-sec {
+  background: #242428;
+  color: #e1e1e6;
+  border: 1px solid #36363c;
+}
+
+.btn-sec:hover {
+  background: #2e2e34;
+  border-color: #484850;
+  color: #ffffff;
+}
+
+/* Media Grid Item Structure */
+.grid-item {
+  position: relative;
+  border-radius: 8px;
+  background: #18181b;
+  display: flex;
+  flex-direction: column;
+  border: 2px solid #27272a;
+  overflow: hidden;
+  transition: border-color 0.2s ease, transform 0.15s ease, box-shadow 0.2s ease;
+  cursor: pointer;
+}
+
+.grid-item:hover {
+  border-color: #3f3f46;
+}
+
+.grid-item.selected {
+  border-color: #0066cc;
+  box-shadow: 0 0 0 1px #0066cc;
+}
+
+/* Formal Custom Checkbox Overlay */
+.item-checkbox-wrapper {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.item-checkbox {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  border: 1.5px solid rgba(255, 255, 255, 0.7);
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(4px);
+  cursor: pointer;
+  outline: none;
+  transition: all 0.2s ease;
+  display: grid;
+  place-content: center;
+}
+
+.item-checkbox:hover {
+  border-color: #ffffff;
+  background: rgba(0, 0, 0, 0.6);
+}
+
+.item-checkbox:checked {
+  background-color: #0066cc;
+  border-color: #0066cc;
+}
+
+.item-checkbox:checked::before {
+  content: "";
+  width: 5px;
+  height: 9px;
+  border: solid white;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+  margin-bottom: 2px;
+}
+
+/* Formal 'X' Delete Button */
+.btn-delete {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(4px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  color: #d1d1d6;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  transition: all 0.2s ease;
+  line-height: 1;
+}
+
+.btn-delete:hover {
+  background: #d32f2f;
+  color: #ffffff;
+  border-color: #d32f2f;
+  transform: scale(1.05);
 }

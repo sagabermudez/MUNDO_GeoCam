@@ -7,19 +7,20 @@ const ASSETS_TO_CACHE = [
   '/manifest.json'
 ];
 
-// Instantly activate new service worker and download fresh assets
-self.addEventListener('install', (event) => {
-  self.skipWaiting(); 
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      // Force network fetch (cache: 'reload') so it doesn't cache stale HTTP files
-      const cachePromises = ASSETS_TO_CACHE.map((url) => {
-        return fetch(new Request(url, { cache: 'reload' })).then((response) => {
-          if (!response.ok) throw new Error(`Failed to fetch ${url}`);
-          return cache.put(url, response);
+// Fetch strategy: Cache first, fall back to network
+self.addEventListener('fetch', (event) => {
+  event.respondWith(
+    caches.match(event.request).then((cachedResponse) => {
+      // Return cached asset immediately if found, otherwise fetch from network
+      return cachedResponse || fetch(event.request).then((networkResponse) => {
+        return caches.open(CACHE_NAME).then((cache) => {
+          cache.put(event.request, networkResponse.clone());
+          return networkResponse;
         });
       });
-      return Promise.all(cachePromises);
+    }).catch(() => {
+      // Optional: Return a fallback offline page/image here if both fail
+      console.error('Offline and resource not cached:', event.request.url);
     })
   );
 });
